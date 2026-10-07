@@ -65,7 +65,8 @@ def from_pools(addr: str, symbol: str, pools: list[dict],
     }
 
 
-def add_dossier(t: dict, info: dict, conc: dict | None) -> dict:
+def add_dossier(t: dict, info: dict, conc: dict | None,
+                auth: dict | None = None) -> dict:
     """Merge GeckoTerminal token info and RPC concentration into the token."""
     holders = info.get("holders") or {}
     dist = holders.get("distribution_percentage") or {}
@@ -73,8 +74,10 @@ def add_dossier(t: dict, info: dict, conc: dict | None) -> dict:
             "name": info.get("name"),
             # GeckoTerminal says "no" when renounced: a string, not null.
             # Anything else ("yes", an address, None) is kept as-is for the check.
-            "mint_authority": info.get("mint_authority"),
-            "freeze_authority": info.get("freeze_authority"),
+            # The chain (auth) wins; GeckoTerminal is the fallback.
+            "mint_authority": (auth or {}).get("mint_authority", info.get("mint_authority")),
+            "freeze_authority": (auth or {}).get("freeze_authority",
+                                                 info.get("freeze_authority")),
             "is_honeypot": info.get("is_honeypot"),
             "holder_count": holders.get("count"),
             "gt_top_10_pct": (_num(dist.get("top_10")) / 100
@@ -97,4 +100,6 @@ def clean_handle(h):
     h = h.strip().lstrip("@").split("?")[0]
     h = h.replace("https://", "").replace("x.com/", "").replace("twitter.com/", "")
     h = h.split("/")[0]
+    if h.lower() in {"i", "home", "search", "intent", "share"}:
+        return None                                # x.com/i/communities/... is not an account
     return h if h and h.replace("_", "").isalnum() and len(h) <= 15 else None

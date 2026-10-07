@@ -25,6 +25,7 @@ GT_PER_MINUTE  = 10   # GeckoTerminal free tier; the limiter paces every GT call
 NEW_POOL_PAGES = 2    # pages of new_pools per run (~20 pools per page)
 TRENDING_PAGES = 1    # pages of trending_pools per run, so the watchlist is never empty
 MAX_DOSSIERS   = 6    # GT info + RPC checks per run, best candidates first
+RPC_PER_MINUTE = 20   # Solana RPC pacing; raise to ~300 with a private RPC URL (e.g. Helius)
 MULTI_BATCH    = 30   # tokens per GeckoTerminal tokens/multi call (its maximum)
 MAX_MARKET_CALLS = 10 # cap on market-pass GT calls per run (300 tokens), newest first
 STALE_HOURS    = 6    # a token still failing liquidity/volume after this long is dropped
@@ -32,7 +33,7 @@ STALE_HOURS    = 6    # a token still failing liquidity/volume after this long i
 # --- How long a rejection stands, by the check that fired (minutes) -----------
 BENCH_MINUTES = {
     # facts that will not change while the token exists
-    "authority_open": 100_000, "top_wallet": 100_000, "too_old": 100_000,
+    "authority_open": 100_000, "authority_unknown": 20, "top_wallet": 100_000, "too_old": 100_000,
     # can change as the float moves
     "top_10": 90, "holders": 90,
     # can change inside the hour; keep short or you miss the token maturing

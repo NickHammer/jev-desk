@@ -93,11 +93,16 @@ def main():
             db.sit(t["addr"], "dossier_failed")
             continue
         try:
+            auth = sources.mint_authorities(t["addr"])
+        except Exception as e:
+            print(f"   authority lookup failed for {t['ticker']}: {e} (using GeckoTerminal)")
+            auth = None
+        try:
             conc = sources.wallet_concentration(t["addr"])
         except Exception as e:
             print(f"   holder lookup failed for {t['ticker']}: {e} (kept as unknown)")
             conc = None
-        d = add_dossier(t, info, conc)
+        d = add_dossier(t, info, conc, auth)
         k = chain_kill(d)
         print(f"   {d['ticker']:<12} mint {d['mint_authority']}/freeze {d['freeze_authority']}"
               f"  top wallet {pct(d['top_wallet_pct'])}  top10 {pct(d['top_10_pct'])}"

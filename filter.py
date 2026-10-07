@@ -39,6 +39,8 @@ def chain_kill(d: dict) -> str | None:
     don't kill either; they travel on to the judge as missing data."""
     if _open(d["mint_authority"]) or _open(d["freeze_authority"]):
         return "authority_open"
+    if d["mint_authority"] is None or d["freeze_authority"] is None:
+        return "authority_unknown"                 # never trade a mint we couldn't read
     if d["top_wallet_pct"] is not None and d["top_wallet_pct"] > HARD["max_top_wallet"]:
         return "top_wallet"
     top10 = d["top_10_pct"] if d["top_10_pct"] is not None else d["gt_top_10_pct"]

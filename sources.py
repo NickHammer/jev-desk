@@ -5,7 +5,7 @@ import time
 import requests
 
 from solana_util import is_on_curve
-from thresholds import GT_PER_MINUTE, MULTI_BATCH
+from thresholds import GT_PER_MINUTE, MULTI_BATCH, RPC_PER_MINUTE
 
 GT = "https://api.geckoterminal.com/api/v2"
 RPC = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
@@ -98,14 +98,34 @@ def gt_token_info(addr: str) -> dict:
     return _gt(f"/networks/solana/tokens/{addr}/info")["data"]["attributes"]
 
 
+rpc_limit = Limiter(RPC_PER_MINUTE)
+
+
 def _rpc(method: str, params: list):
-    r = requests.post(RPC, json={"jsonrpc": "2.0", "id": 1, "method": method,
-                                 "params": params}, headers=HEADERS, timeout=20)
-    r.raise_for_status()
-    body = r.json()
-    if "error" in body:
-        raise RuntimeError(f"{method}: {body['error'].get('message')}")
-    return body["result"]
+    """Solana JSON-RPC, paced, with backoff on 429 (the public endpoint is strict)."""
+    for attempt in range(4):
+        rpc_limit.wait()
+        r = requests.post(RPC, json={"jsonrpc": "2.0", "id": 1, "method": method,
+                                     "params": params}, headers=HEADERS, timeout=20)
+        if r.status_code == 429 and attempt < 3:
+            time.sleep(2 * 2 ** attempt)           # 2s, 4s, 8s
+            continue
+        r.raise_for_status()
+        body = r.json()
+        if "error" in body:
+            raise RuntimeError(f"{method}: {body['error'].get('message')}")
+        return body["result"]
+
+
+def mint_authorities(mint: str) -> dict:
+    """Read mint/freeze authority straight from the chain: the source of truth.
+    Returned in GeckoTerminal's vocabulary: "no" = renounced, "yes" = still set."""
+    acct = _rpc("getAccountInfo", [mint, {"encoding": "jsonParsed"}])["value"]
+    info = (((acct or {}).get("data") or {}).get("parsed") or {}).get("info") or {}
+    if not info:
+        raise RuntimeError("mint account not parseable")
+    return {"mint_authority": "yes" if info.get("mintAuthority") else "no",
+            "freeze_authority": "yes" if info.get("freezeAuthority") else "no"}
 
 
 def wallet_concentration(mint: str) -> dict:
