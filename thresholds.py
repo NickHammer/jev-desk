@@ -2,7 +2,7 @@
 
 import os
 
-# --- Market checks (from DexScreener; cheap, run on every watched token) -----
+# --- Market checks (GeckoTerminal pool data; cheap, run on every watched token) -
 HARD = {
     "min_age_minutes":   15,         # younger than this and the data is noise
     "max_age_hours":     72,         # older than this and it is not a launch any more
