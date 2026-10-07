@@ -5,10 +5,9 @@ import time
 import requests
 
 from solana_util import is_on_curve
-from thresholds import GT_PER_MINUTE, DEX_BATCH
+from thresholds import GT_PER_MINUTE, MULTI_BATCH
 
 GT = "https://api.geckoterminal.com/api/v2"
-DEX = "https://api.dexscreener.com/latest/dex/tokens"
 RPC = os.environ.get("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
 HEADERS = {"Accept": "application/json", "User-Agent": "jev-desk/0.1"}
 
@@ -69,22 +68,27 @@ def trending_pools(pages: int) -> list[dict]:
     return found
 
 
-# --- Market data: DexScreener, up to 30 tokens per call ----------------------
+# --- Market data: GeckoTerminal, up to 30 tokens per call --------------------
 
-def dex_pairs(addrs: list[str]) -> dict[str, list[dict]]:
-    """addr -> every pair where that token is the BASE token."""
+def token_pools(addrs: list[str]) -> dict[str, list[dict]]:
+    """addr -> its top pools (GeckoTerminal pool objects), where it is the BASE token.
+
+    One GT call per 30 tokens: tokens/multi with include=top_pools returns the pools'
+    full market data (reserves, volume, buys/sells, price change, created time)."""
     out: dict[str, list[dict]] = {a: [] for a in addrs}
-    for i in range(0, len(addrs), DEX_BATCH):
-        chunk = addrs[i:i + DEX_BATCH]
-        r = requests.get(f"{DEX}/{','.join(chunk)}", headers=HEADERS, timeout=20)
-        r.raise_for_status()
-        for p in r.json().get("pairs") or []:
-            if p.get("chainId") != "solana":
+    for i in range(0, len(addrs), MULTI_BATCH):
+        chunk = addrs[i:i + MULTI_BATCH]
+        resp = _gt(f"/networks/solana/tokens/multi/{','.join(chunk)}",
+                   include="top_pools")
+        for pool in resp.get("included") or []:
+            if pool.get("type") != "pool":
                 continue
-            base = (p.get("baseToken") or {}).get("address")
-            if base in out:
-                out[base].append(p)
-        time.sleep(0.3)                            # DexScreener allows ~300/min; be polite
+            rel = pool.get("relationships") or {}
+            base = (((rel.get("base_token") or {}).get("data") or {}).get("id") or "")
+            addr = base.split("_", 1)[1] if base.startswith("solana_") else None
+            if addr in out:
+                pool["dex_id"] = ((rel.get("dex") or {}).get("data") or {}).get("id")
+                out[addr].append(pool)
     return out
 
 

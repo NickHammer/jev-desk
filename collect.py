@@ -2,6 +2,7 @@
 Every file downstream reads these names and only these."""
 
 import time
+from datetime import datetime
 
 
 def _num(x):
@@ -14,28 +15,43 @@ def _num(x):
         return None
 
 
-def from_pairs(addr: str, pairs: list[dict]) -> dict | None:
-    """One token from all of its DexScreener pairs. None if it has no pairs at all."""
-    if not pairs:
+def _epoch(iso):
+    if not iso:
         return None
-    best = max(pairs, key=lambda p: _num((p.get("liquidity") or {}).get("usd")) or 0)
-    created = [p["pairCreatedAt"] for p in pairs if p.get("pairCreatedAt")]
-    txns = best.get("txns") or {}
-    vol = best.get("volume") or {}
-    chg = best.get("priceChange") or {}
+    try:
+        return datetime.fromisoformat(iso.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def from_pools(addr: str, symbol: str, pools: list[dict],
+               first_seen: float | None = None) -> dict | None:
+    """One token from its GeckoTerminal top pools. None if it has no pools at all.
+    The deepest pool supplies the numbers; the earliest pool dates the launch."""
+    if not pools:
+        return None
+    best = max(pools, key=lambda p: _num((p.get("attributes") or {})
+                                         .get("reserve_in_usd")) or 0)
+    a = best.get("attributes") or {}
+    txns = a.get("transactions") or {}
+    vol = a.get("volume_usd") or {}
+    chg = a.get("price_change_percentage") or {}
 
     def tx(window, side):
         return (txns.get(window) or {}).get(side)
 
+    created = [e for p in pools
+               if (e := _epoch((p.get("attributes") or {}).get("pool_created_at")))]
+    starts = created + ([first_seen] if first_seen else [])
     buys_h24, sells_h24 = tx("h24", "buys"), tx("h24", "sells")
     return {
         "addr": addr,
-        "ticker": (best.get("baseToken") or {}).get("symbol"),
-        "dex": best.get("dexId"),
-        "pair_addr": best.get("pairAddress"),
-        "price_usd": _num(best.get("priceUsd")),
-        "liquidity_usd": _num((best.get("liquidity") or {}).get("usd")),
-        "mcap_usd": _num(best.get("marketCap")) or _num(best.get("fdv")),
+        "ticker": symbol or (a.get("name") or "?").split(" / ")[0],
+        "dex": best.get("dex_id"),
+        "pool_addr": a.get("address"),
+        "price_usd": _num(a.get("base_token_price_usd")),
+        "liquidity_usd": _num(a.get("reserve_in_usd")),
+        "mcap_usd": _num(a.get("market_cap_usd")) or _num(a.get("fdv_usd")),
         "volume_h24": _num(vol.get("h24")),
         "volume_h6": _num(vol.get("h6")),
         "volume_h1": _num(vol.get("h1")),
@@ -44,8 +60,8 @@ def from_pairs(addr: str, pairs: list[dict]) -> dict | None:
         "trades_h24": (buys_h24 or 0) + (sells_h24 or 0)
                       if buys_h24 is not None or sells_h24 is not None else None,
         "change": {w: _num(chg.get(w)) for w in ("m5", "h1", "h6", "h24")},
-        # earliest pair is the closest thing to the token's launch time
-        "age_minutes": (time.time() - min(created) / 1000) / 60 if created else None,
+        # the earliest evidence of the token: its first pool, or when we first saw it
+        "age_minutes": (time.time() - min(starts)) / 60 if starts else None,
     }
 
 

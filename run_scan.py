@@ -1,7 +1,7 @@
 """Phase 2: one scan, no AI, no trading. Prints the funnel and what survived.
 
-    python run_scan.py              normal run
-    python run_scan.py --verbose    also print every token's numbers and fate
+    python run_scan.py                  normal run
+    python run_scan.py --verbose        also print every token's numbers and fate
     python run_scan.py --ignore-bench   re-check benched tokens (for testing)
 """
 
@@ -16,10 +16,13 @@ load_dotenv(Path(__file__).with_name(".env"))   # before sources reads SOLANA_RP
 
 import db                                         # noqa: E402
 import sources                                    # noqa: E402
-from collect import from_pairs, add_dossier       # noqa: E402
+from collect import from_pools, add_dossier       # noqa: E402
 from filter import market_kill, chain_kill        # noqa: E402
 from thresholds import (NEW_POOL_PAGES, TRENDING_PAGES, MAX_DOSSIERS,  # noqa: E402
-                        BONDING_DEXES)
+                        MULTI_BATCH, MAX_MARKET_CALLS, STALE_HOURS)
+
+# failures that won't fix themselves on an old token: stop watching it entirely
+STALE_REASONS = {"liquidity", "volume", "trades", "mcap", "bonding_curve", "no_pair"}
 
 
 def money(x):
@@ -42,41 +45,41 @@ def main():
     new = db.watch(sources.new_pools(NEW_POOL_PAGES), "new_pools")
     new += db.watch(sources.trending_pools(TRENDING_PAGES), "trending")
     pruned = db.prune()
-    addrs = db.watched()
-    print(f"watchlist: {len(addrs)} tokens ({new} new this run, {pruned} aged out)")
+    watch = db.watched()
+    print(f"watchlist: {len(watch)} tokens ({new} new this run, {pruned} aged out)")
 
-    # 1. Market pass: one DexScreener call per 30 tokens
-    todo = [a for a in addrs if args.ignore_bench or not db.benched(a)]
-    pairs = sources.dex_pairs(todo)
-    kills, survivors, odd_dexes = Counter(), [], Counter()
-    for addr in todo:
-        t = from_pairs(addr, pairs[addr])
-        if t is None:
-            kills["no_pair"] += 1
-            db.sit(addr, "no_pair")
-            continue
-        if t["dex"] not in BONDING_DEXES and t["dex"] not in ("raydium", "pumpswap",
-                                                              "meteora", "orca"):
-            odd_dexes[t["dex"]] += 1
-        k = market_kill(t)
-        if args.verbose:
-            print(f"  {t['ticker'] or '?':<12} {t['dex'] or '?':<10} "
+    # 1. Market pass: one GeckoTerminal call per 30 tokens, newest first, capped
+    todo = [w for w in watch if args.ignore_bench or not db.benched(w["addr"])]
+    todo = todo[:MAX_MARKET_CALLS * MULTI_BATCH]
+    pools = sources.token_pools([w["addr"] for w in todo])
+    kills, survivors, dexes, dropped = Counter(), [], Counter(), 0
+    for w in todo:
+        t = from_pools(w["addr"], w["symbol"], pools[w["addr"]], w["first_seen"])
+        k = "no_pair" if t is None else market_kill(t)
+        if t is not None:
+            dexes[t["dex"]] += 1
+        if args.verbose and t is not None:
+            print(f"  {t['ticker'][:12]:<12} {str(t['dex'])[:14]:<14} "
                   f"age {t['age_minutes'] or 0:>6.0f}m  liq {money(t['liquidity_usd']):>7} "
                   f"vol {money(t['volume_h24']):>7}  mcap {money(t['mcap_usd']):>7}  "
                   f"trades {t['trades_h24'] or 0:>5}  -> {k or 'PASS'}")
         if k:
             kills[k] += 1
-            if k != "too_young":
-                db.sit(addr, k)
+            age = t["age_minutes"] if t else None
+            if k in STALE_REASONS and (age is None or age > STALE_HOURS * 60):
+                db.drop(w["addr"])
+                dropped += 1
+            elif k != "too_young":
+                db.sit(w["addr"], k)
             continue
         survivors.append(t)
 
     print(f"market pass: {len(todo)} checked, {len(survivors)} survived "
-          f"({len(addrs) - len(todo)} benched from earlier runs)")
+          f"({len(watch) - len(todo)} benched or over the per-run cap, "
+          f"{dropped} stale tokens dropped)")
     for reason, n in kills.most_common():
         print(f"   killed by {reason:<14} {n}")
-    if odd_dexes:
-        print(f"   (dexIds not in the known list: {dict(odd_dexes)})")
+    print(f"   pools by dex: {dict(dexes.most_common())}")
 
     # 2. Dossier pass: the best candidates by turnover get GT info + RPC holders
     survivors.sort(key=lambda t: (t["volume_h24"] or 0) / max(t["mcap_usd"] or 1, 1),
@@ -106,10 +109,10 @@ def main():
             continue
         finalists.append(d)
 
+    waiting = len(survivors) - MAX_DOSSIERS
     print(f"chain pass: {min(len(survivors), MAX_DOSSIERS)} checked, "
           f"{len(finalists)} survived"
-          + (f" ({len(survivors) - MAX_DOSSIERS} waiting for a dossier slot)"
-             if len(survivors) > MAX_DOSSIERS else ""))
+          + (f" ({waiting} waiting for a dossier slot)" if waiting > 0 else ""))
     for reason, n in chain_kills.most_common():
         print(f"   killed by {reason:<14} {n}")
 

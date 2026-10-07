@@ -15,16 +15,19 @@ HARD = {
     "min_holders":       80,         # only applied when GeckoTerminal reports a count
 }
 
-# DexScreener dexIds that mean "still on a launchpad bonding curve, not a real pool yet".
-# Unknown ids are printed by run_scan.py --verbose so this list can grow from real data.
-BONDING_DEXES = {"pumpfun", "moonshot", "launchlab", "bonkfun"}
+# GeckoTerminal dex ids that mean "still on a launchpad bonding curve, not a real pool yet".
+# run_scan.py prints every dex id it sees, so this list can grow from real data.
+BONDING_DEXES = {"pump-fun", "pumpfun", "moonshot", "raydium-launchlab", "launchlab",
+                 "bonk-fun", "meteora-dbc"}
 
 # --- Budgets -----------------------------------------------------------------
 GT_PER_MINUTE  = 10   # GeckoTerminal free tier; the limiter paces every GT call to this
 NEW_POOL_PAGES = 2    # pages of new_pools per run (~20 pools per page)
 TRENDING_PAGES = 1    # pages of trending_pools per run, so the watchlist is never empty
 MAX_DOSSIERS   = 6    # GT info + RPC checks per run, best candidates first
-DEX_BATCH      = 30   # addresses per DexScreener call (its maximum)
+MULTI_BATCH    = 30   # tokens per GeckoTerminal tokens/multi call (its maximum)
+MAX_MARKET_CALLS = 10 # cap on market-pass GT calls per run (300 tokens), newest first
+STALE_HOURS    = 6    # a token still failing liquidity/volume after this long is dropped
 
 # --- How long a rejection stands, by the check that fired (minutes) -----------
 BENCH_MINUTES = {

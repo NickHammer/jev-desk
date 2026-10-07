@@ -35,8 +35,17 @@ def prune() -> int:
     return n
 
 
-def watched() -> list[str]:
-    return [r[0] for r in DB.execute("SELECT addr FROM watchlist")]
+def watched() -> list[dict]:
+    """Newest first, so a capped market pass spends its calls on fresh launches."""
+    rows = DB.execute("SELECT addr, symbol, first_seen FROM watchlist "
+                      "ORDER BY first_seen DESC")
+    return [{"addr": a, "symbol": s, "first_seen": f} for a, s, f in rows]
+
+
+def drop(addr: str):
+    """Stop watching a token for good (stale, or failed a permanent check)."""
+    DB.execute("DELETE FROM watchlist WHERE addr=?", (addr,))
+    DB.commit()
 
 
 def benched(addr: str) -> bool:
