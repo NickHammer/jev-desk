@@ -1,5 +1,7 @@
 """Every tunable number lives here. When you retune the desk, edit this file only."""
 
+import os
+
 # --- Market checks (from DexScreener; cheap, run on every watched token) -----
 HARD = {
     "min_age_minutes":   15,         # younger than this and the data is noise
@@ -25,7 +27,9 @@ GT_PER_MINUTE  = 10   # GeckoTerminal free tier; the limiter paces every GT call
 NEW_POOL_PAGES = 2    # pages of new_pools per run (~20 pools per page)
 TRENDING_PAGES = 1    # pages of trending_pools per run, so the watchlist is never empty
 MAX_DOSSIERS   = 6    # GT info + RPC checks per run, best candidates first
-RPC_PER_MINUTE = 20   # Solana RPC pacing; raise to ~300 with a private RPC URL (e.g. Helius)
+# Solana RPC pacing. The public endpoint needs ~20; set RPC_PER_MINUTE in .env (e.g. 300)
+# when SOLANA_RPC_URL points at a private RPC like Helius.
+RPC_PER_MINUTE = int(os.environ.get("RPC_PER_MINUTE", "20"))
 MULTI_BATCH    = 30   # tokens per GeckoTerminal tokens/multi call (its maximum)
 MAX_MARKET_CALLS = 10 # cap on market-pass GT calls per run (300 tokens), newest first
 STALE_HOURS    = 6    # a token still failing liquidity/volume after this long is dropped
