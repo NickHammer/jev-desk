@@ -21,7 +21,7 @@ import judge                                                    # noqa: E402
 import db                                                       # noqa: E402
 from filter import judge_fails                                  # noqa: E402
 from thresholds import (PICK_MIN_WORTH, PICK_MIN_CONF,          # noqa: E402
-                        NO_SOCIAL_CUT)
+                        NO_SOCIAL_CUT, RUN_KEEP_DAYS)
 
 RUNS = Path(__file__).with_name("runs")
 
@@ -32,7 +32,18 @@ def num(ans, name):
     return "  -  " if v is None else f"{v:5.2f}"
 
 
+def prune_old_runs() -> int:
+    """Delete saved judgements older than RUN_KEEP_DAYS (scores live in desk.db)."""
+    cutoff = time.time() - RUN_KEEP_DAYS * 86400
+    old = [f for f in RUNS.glob("judged-2*.json") if f.stat().st_mtime < cutoff]
+    for f in old:
+        f.unlink()
+    return len(old)
+
+
 def main():
+    if RUNS.exists() and (n := prune_old_runs()):
+        print(f"removed {n} saved run(s) older than {RUN_KEEP_DAYS} days")
     src = RUNS / "latest.json"
     if not src.exists():
         sys.exit("No runs/latest.json yet. Run `python run_scan.py` first.")
@@ -138,6 +149,12 @@ def main():
           "verdict": "pick" if r["addr"] == picked else ("pass" if not r["kill"] else "reject"),
           "fails": r["fails"]} for r in judged], run=stamp)
     print(f"tracking {added} new token(s) for scoring (run `python score.py`)")
+
+    # Rejected tokens sit out so the next scans' dossier slots go to other tokens
+    benched = {r["ticker"]: db.sit_longest(r["addr"], r["fails"]) for r in judged if r["fails"]}
+    if benched:
+        print("benched: " + ", ".join(f"{t} ({why}, {db.bench_minutes(why)} min)"
+                                      for t, why in benched.items()))
 
 
 if __name__ == "__main__":

@@ -38,7 +38,7 @@ def update() -> tuple[int, int]:
     for d in due:
         p = prices.get(d["addr"])
         if p is None:
-            missing += 1                     # retried on later runs, then given up
+            missing += 1                     # retried while its window is still open
             continue
         db.fill(d["id"], d["checkpoint"], p, (now - d["judged_at"]) / 60)
         filled += 1
@@ -96,9 +96,9 @@ def report():
                            for cp in CHECKPOINTS)
             print(f"{check[:27]:<28}{line}")
 
-    priced = sum(net_return(r, cp) is not None for r in rows for cp in CHECKPOINTS)
-    pending = sum(r.get(f"p_{cp}") is None for r in rows for cp in CHECKPOINTS)
-    print(f"\n{priced} checkpoint(s) priced, {pending} still pending or unpriceable.")
+    states = [db.checkpoint_state(r, cp) for r in rows for cp in CHECKPOINTS]
+    print(f"\ncheckpoints: {states.count('priced')} priced, {states.count('pending')} pending, "
+          f"{states.count('missed')} missed (window closed before a price was taken)")
     smallest = min((sum(net_return(r, "24h") is not None for r in rows if r["verdict"] == v)
                     for v in ("pass", "reject")), default=0)
     if smallest < SMALL:

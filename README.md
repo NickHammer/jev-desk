@@ -44,8 +44,29 @@ python run_scan.py && python run_judge.py && python score.py
 
 Every judged token's price is saved; `score.py` re-prices them 1h, 6h and 24h later
 and prints a scorecard: how picks, passes and rejects actually did after a 3% trading
-cost, and how tokens rejected by each check did. Run it often (Phase 5 will automate
-this). Checkpoints missed by more than 3x their delay are skipped, not filled late.
+cost, and how tokens rejected by each check did. Each checkpoint is only priced in a
+short window after it falls due (30 min / 2 h / 6 h); outside it, it counts as missed.
+
+## Run it unattended (Phase 5)
+
+```bash
+bash deploy/install.sh        # as your normal user; it asks for sudo
+```
+
+That installs a systemd timer that runs `run_all.sh` (scan, judge, score) every 15
+minutes, including after reboots. Useful commands:
+
+```bash
+journalctl -u jev-desk -f                       # watch cycles live
+journalctl -u jev-desk --since today            # today's cycles
+systemctl list-timers jev-desk.timer            # when the next cycle runs
+sudo systemctl start jev-desk.service           # run one cycle now
+.venv/bin/python score.py --no-update           # print the scorecard any time
+sudo systemctl disable --now jev-desk.timer     # stop it
+```
+
+After pulling new code, nothing needs reinstalling: the next cycle uses it. Re-run
+`deploy/install.sh` only if the files in `deploy/` change.
 
 See `ARCHITECTURE.md` for diagrams of how it all fits together.
 
@@ -64,6 +85,8 @@ See `ARCHITECTURE.md` for diagrams of how it all fits together.
 | `judge.py` | the only code that calls Jev; builds the state it sees |
 | `run_judge.py` | asks Jev about the last scan's finalists, tracks them for scoring |
 | `score.py` | prices tracked tokens at 1h / 6h / 24h and prints the scorecard |
+| `run_all.sh` | one full cycle: scan, judge, score |
+| `deploy/` | systemd timer, service, and `install.sh` |
 | `ARCHITECTURE.md` | diagrams of the whole pipeline |
 | `CHANGELOG.md` | what changed and when |
 

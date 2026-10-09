@@ -46,8 +46,17 @@ BENCH_MINUTES = {
     # can change inside the hour; keep short or you miss the token maturing
     "liquidity": 25, "volume": 25, "mcap": 25, "trades": 25, "no_sells": 25, "turnover": 25,
     "bonding_curve": 15, "no_pair": 10, "dossier_failed": 20,
+    # --- Jev rejections. A token failing several checks sits out the LONGEST of them.
+    # market conditions that move within the hour
+    "momentum_already_spent": 30, "liquidity_fits_ticket": 30,
+    "shape_fading": 30, "shape_one_buyer": 30, "shape_too_early": 30, "shape_weak": 30,
+    # trading patterns that take longer to change
+    "wash_trading": 60, "concentration_is_exit_risk": 90, "dev_still_loaded": 90,
+    # the listing's own text rarely changes
+    "effort": 360, "copycat": 360,
 }
 DEFAULT_BENCH = 45
+MISSING_ANSWER_BENCH = 20    # Jev didn't answer a question: try again soon
 
 # --- Phase 3: Jev ------------------------------------------------------------
 JEV_MODEL = "jev-latest"     # the response always reports the exact version; we log that
@@ -75,4 +84,9 @@ NO_SOCIAL_CUT   = 0.60       # we never read the X account itself, so size is al
 CHECKPOINTS = {"1h": 60, "6h": 360, "24h": 1440}   # minutes after the judgement
 ROUND_TRIP_COST_PCT = 3.0    # assumed fees + slippage to buy and sell a fresh token
 TRACK_DEDUP_HOURS = 24       # a token judged again within this window isn't re-tracked
-GIVE_UP_FACTOR = 3           # stop trying to price a checkpoint after 3x its delay
+# A checkpoint is only priced inside this window after it falls due (minutes).
+# Outside it, the checkpoint is recorded as missed rather than filled with a late price.
+CHECKPOINT_WINDOW = {"1h": 30, "6h": 120, "24h": 360}
+
+# --- Phase 5: running unattended ---------------------------------------------
+RUN_KEEP_DAYS = 7            # runs/judged-*.json older than this are deleted

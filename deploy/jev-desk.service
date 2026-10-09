@@ -1,0 +1,15 @@
+# Template: deploy/install.sh fills in __USER__ and __DIR__.
+[Unit]
+Description=jev-desk shadow cycle (scan, judge, score)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/run_all.sh
+Environment=PYTHONUNBUFFERED=1
+# A cycle normally takes a few minutes; never let one overlap the next.
+TimeoutStartSec=14min
+Nice=10

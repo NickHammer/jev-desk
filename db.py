@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 from thresholds import (BENCH_MINUTES, DEFAULT_BENCH, HARD, CHECKPOINTS,
-                        TRACK_DEDUP_HOURS, GIVE_UP_FACTOR)
+                        TRACK_DEDUP_HOURS, CHECKPOINT_WINDOW, MISSING_ANSWER_BENCH)
 
 DB = sqlite3.connect(Path(__file__).with_name("desk.db"))
 DB.executescript("""
@@ -68,6 +68,24 @@ def sit(addr: str, reason: str):
     DB.commit()
 
 
+def bench_minutes(reason: str) -> int:
+    if reason.endswith("_missing"):
+        return MISSING_ANSWER_BENCH
+    return BENCH_MINUTES.get(reason, DEFAULT_BENCH)
+
+
+def sit_longest(addr: str, reasons: list[str]) -> str | None:
+    """Bench a token that failed several checks for the longest of their bench times,
+    since it can't pass until its slowest-changing problem changes. Returns the reason."""
+    if not reasons:
+        return None
+    worst = max(reasons, key=bench_minutes)
+    DB.execute("INSERT OR REPLACE INTO bench VALUES (?,?,?)",
+               (addr, worst, time.time() + bench_minutes(worst) * 60))
+    DB.commit()
+    return worst
+
+
 # --- Phase 4: tracked outcomes ------------------------------------------------
 
 def track(rows: list[dict], run: str) -> int:
@@ -93,17 +111,25 @@ def track(rows: list[dict], run: str) -> int:
 
 
 def due_checkpoints() -> list[dict]:
-    """Checkpoints whose time has come and that haven't been priced yet."""
+    """Unpriced checkpoints that are due and still inside their pricing window."""
     now, out = time.time(), []
     for name, mins in CHECKPOINTS.items():
-        due_after = mins * 60
-        give_up = due_after * GIVE_UP_FACTOR
+        opens = mins * 60
+        closes = opens + CHECKPOINT_WINDOW[name] * 60
         for rid, addr, at in DB.execute(
                 f"SELECT id, addr, judged_at FROM tracked WHERE p_{name} IS NULL "
                 f"AND judged_at + ? <= ? AND judged_at + ? > ?",
-                (due_after, now, give_up, now)):
+                (opens, now, closes, now)):
             out.append({"id": rid, "addr": addr, "checkpoint": name, "judged_at": at})
     return out
+
+
+def checkpoint_state(row: dict, name: str) -> str:
+    """'priced', 'missed' (window closed unpriced), or 'pending' (not due or still open)."""
+    if row.get(f"p_{name}") is not None:
+        return "priced"
+    closes = row["judged_at"] + (CHECKPOINTS[name] + CHECKPOINT_WINDOW[name]) * 60
+    return "missed" if time.time() >= closes else "pending"
 
 
 def fill(rid: int, checkpoint: str, price: float, minutes: float):

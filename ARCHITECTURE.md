@@ -3,21 +3,24 @@
 How the project works, top to bottom. GitHub renders the diagrams below automatically.
 This file is updated with every phase; see `CHANGELOG.md` for the history.
 
-**Current state:** Phases 1–4 built. Shadow mode only: the desk never holds keys or money.
+**Current state:** Phases 1–5 built: the desk runs itself every 15 minutes. Shadow mode only:
+it never holds keys or money.
 
 ## 1. The big picture
 
 ```mermaid
 flowchart TD
-    you(["You, by hand for now<br/>(Phase 5 adds a timer)"])
-    you --> scan["run_scan.py<br/>find and fact-check launches"]
+    timer(["systemd timer<br/>every 15 minutes"])
+    timer --> cycle["run_all.sh<br/>one cycle"]
+    cycle --> scan["run_scan.py<br/>find and fact-check launches"]
     scan --> latest[("runs/latest.json<br/>finalists")]
     latest --> judgeRun["run_judge.py<br/>Jev judges the finalists"]
     judgeRun --> judged[("runs/judged-*.json<br/>answers + shadow pick")]
     judgeRun --> tracked[("tracked table in desk.db<br/>every judged token + its price")]
-    you --> scoreRun["score.py<br/>re-prices at 1h / 6h / 24h"]
+    cycle --> scoreRun["score.py<br/>re-prices at 1h / 6h / 24h"]
     tracked --> scoreRun
     scoreRun --> card["scorecard<br/>picks vs passes vs rejects"]
+    cycle --> logs[("journalctl -u jev-desk<br/>every cycle's output")]
 
     subgraph ext["Outside services (read-only)"]
         gt["GeckoTerminal<br/>free, 10 calls/min"]
@@ -29,6 +32,30 @@ flowchart TD
     scan <--> rpc
     judgeRun <--> jev
     scoreRun <--> gt
+```
+
+### One cycle, step by step
+
+```mermaid
+sequenceDiagram
+    participant T as systemd timer
+    participant R as run_all.sh
+    participant S as run_scan.py
+    participant J as run_judge.py
+    participant K as score.py
+    T->>R: start (every 15 min, never overlapping)
+    R->>S: scan
+    alt scan succeeded
+        S-->>R: runs/latest.json written
+        R->>J: judge the finalists
+        J->>J: delete saved runs older than 7 days
+        J-->>R: shadow pick or NO TRADE, tokens tracked, rejects benched
+    else scan failed
+        R->>R: skip the judge, so old finalists aren't judged twice
+    end
+    R->>K: score whatever checkpoints are due
+    K-->>R: scorecard
+    R-->>T: exit 0, or 1 if any step failed
 ```
 
 ## 2. The scan: from ~140 launches to a handful of finalists
@@ -76,7 +103,7 @@ flowchart TD
     T --> P["Call 2: project set<br/>text only<br/>effort score, copycat"]
     M --> K{"judge_fails<br/>vs SOFT in thresholds.py"}
     P --> K
-    K -- "any fail" --> X["rejected<br/>every failed check logged"]
+    K -- "any fail" --> X["rejected<br/>every failed check logged,<br/>benched for the longest one"]
     K -- passes --> S["survivors"]
     S --> N{"how many?"}
     N -- 0 --> NT["NO TRADE"]
@@ -121,7 +148,7 @@ sequenceDiagram
 flowchart TD
     T[("tracked table<br/>price at judgement, verdict, failed checks")] --> D{"a checkpoint is due?<br/>1h, 6h or 24h after judgement"}
     D -- "not yet" --> W["wait for a later run"]
-    D -- "overdue by 3x" --> GU["give up on that checkpoint<br/>never filled late"]
+    D -- "window closed" --> GU["record as missed<br/>never filled with a late price"]
     D -- due --> PR["GeckoTerminal tokens/multi<br/>current price, 30 per call"]
     PR -- "no price" --> RT["retry on a later run"]
     PR -- price --> F["store price + minutes elapsed"]
@@ -134,6 +161,10 @@ Returns are measured from the price at judgement and shown after an assumed 3%
 round-trip cost (`ROUND_TRIP_COST_PCT`). "Win" is the share of tokens that would have
 made money after that cost. A token judged again within 24 hours is not tracked again,
 so busy tokens don't count many times; a pick is always recorded.
+
+Each checkpoint is only priced in a short window after it falls due
+(`CHECKPOINT_WINDOW`: 30 min after 1h, 2 h after 6h, 6 h after 24h). With the timer
+running every 15 minutes, checkpoints land within minutes of their mark.
 
 The scorecard warns until each group has 30+ results at 24h. Before that, differences
 are noise.
@@ -149,6 +180,7 @@ stateDiagram-v2
     Benched --> Dropped: permanent fact, such as open authority or a whale
     Watching --> Finalist: passed market and chain checks
     Finalist --> Rejected: failed a Jev check
+    Rejected --> Benched: sits out the longest failed check
     Finalist --> Picked: chosen as the shadow buy
     Picked --> Tracked: price recorded
     Rejected --> Tracked: price recorded
@@ -159,13 +191,15 @@ stateDiagram-v2
 
 Bench lengths depend on why a token failed, so facts that will never change (an open
 mint, a 7% whale) sit out for good, while "too young" or "no pool yet" come back within
-minutes.
+minutes. Jev rejections bench too: 30 min for momentum or shape, 60 min for wash
+trading, 90 min for concentration, 6 hours for effort or copycat. A token that failed
+several checks sits out the longest, so dossier slots keep going to new tokens.
 
 ## 6. Files and who calls whom
 
 ```mermaid
 flowchart LR
-    subgraph entry["Run these"]
+    subgraph entry["Steps of a cycle"]
         rs["run_scan.py"]
         rj["run_judge.py"]
         sc["score.py"]
@@ -179,9 +213,11 @@ flowchart LR
     end
     subgraph support["Support"]
         th["thresholds.py<br/>every tunable number"]
-        db["db.py<br/>watchlist + bench"]
+        db["db.py<br/>watchlist, bench, tracked"]
         su["solana_util.py<br/>wallet vs pool test"]
     end
+    tm(["systemd timer"]) --> ra["run_all.sh"]
+    ra --> rs & rj & sc
     rs --> src & col & fil & db
     rj --> jd & fil & db
     sc --> src & db
@@ -197,7 +233,9 @@ flowchart LR
 | `.env` | Jev key, Helius RPC URL, `RPC_PER_MINUTE` | **never** |
 | `desk.db` | watchlist, bench and tracked outcomes (SQLite) | no |
 | `runs/latest.json` | finalists from the last scan | no |
-| `runs/judged-*.json` | every Jev answer, model id, and shadow pick | no |
+| `runs/judged-*.json` | every Jev answer, model id, and shadow pick; kept 7 days | no |
+| systemd journal | each cycle's output (`journalctl -u jev-desk`) | no |
+| `/etc/systemd/system/jev-desk.*` | the installed timer, from `deploy/` | no (templates are) |
 | everything else | code and docs | yes |
 
 ## 8. Roadmap
@@ -207,7 +245,8 @@ flowchart LR
 | 1 | Pi setup, keys, API tests | done |
 | 2 | Scanner with market and chain checks | done |
 | 3 | Jev judges the finalists | done |
-| 4 | Shadow scorekeeper: every judged token re-priced at 1h / 6h / 24h | **built, testing on the Pi** |
-| 5 | Run unattended every 15 minutes (systemd timer) | next |
-| 6 | Review the scorecard; decide whether execution is worth building | planned |
-| later | Dashboard served from the Pi; optional X reading via xAI | ideas |
+| 4 | Shadow scorekeeper: every judged token re-priced at 1h / 6h / 24h | done |
+| 5 | Run unattended every 15 minutes (systemd timer) | **built, installing on the Pi** |
+| next | Live dashboard served from the Pi, with an animated view of the pipeline | next |
+| 6 | Review the scorecard (1–2 weeks of data); decide whether execution is worth building | planned |
+| later | Optional X reading via xAI | idea |

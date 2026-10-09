@@ -2,6 +2,32 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-09: Phase 5, running unattended
+
+### Added
+- **15-minute timer** (`deploy/jev-desk.service`, `deploy/jev-desk.timer`): systemd runs
+  one full cycle every 15 minutes, survives reboots, catches up once after the Pi was
+  off, and never lets two cycles overlap. Logs go to `journalctl -u jev-desk`.
+- **`deploy/install.sh`**: fills in your username and project folder and installs the
+  timer. Run it as your normal user; it asks for sudo itself.
+- **`run_all.sh`**: one cycle (scan, judge, score). If the scan fails, the judge is
+  skipped so old finalists aren't judged twice; scoring still runs. Exits non-zero if
+  any step failed, so `systemctl status jev-desk` shows it.
+- **Old runs are cleaned up**: `runs/judged-*.json` older than 7 days (`RUN_KEEP_DAYS`)
+  are deleted at the start of each judge run. Scores live in `desk.db` and are kept.
+- **Tokens Jev rejects are benched.** A token failing several checks sits out the
+  longest of their times: 30 min for momentum, liquidity fit or shape; 60 min for wash
+  trading; 90 min for concentration or a loaded dev; 6 hours for effort or copycat; 20
+  min if Jev didn't answer. This frees dossier slots for new tokens; before, the same
+  six finalists were re-judged every run.
+
+### Fixed
+- **Checkpoints are only priced inside a tight window** (`CHECKPOINT_WINDOW`): 30 min
+  after the 1h mark, 2h after 6h, 6h after 24h. The old rule allowed up to 3x the delay,
+  so a "6h" price could really be 14 hours old. Checkpoints that miss their window are
+  reported as `missed`. `GIVE_UP_FACTOR` is gone.
+- The scorecard footer now counts checkpoints as priced, pending, or missed.
+
 ## 2026-10-08: Phase 4, the shadow scorekeeper
 
 ### Added
