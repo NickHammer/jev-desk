@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).with_name(".env"))   # before sources reads SOLANA_RPC_URL
 
 import db                                         # noqa: E402
+import events                                     # noqa: E402
 import sources                                    # noqa: E402
 from collect import from_pools, add_dossier       # noqa: E402
 from filter import market_kill, chain_kill        # noqa: E402
@@ -43,15 +44,19 @@ def main():
     args = ap.parse_args()
 
     # 0. Universe: discover tokens and remember them across runs
+    events.prune()
+    events.emit("scout", "start")
     new = db.watch(sources.new_pools(NEW_POOL_PAGES), "new_pools")
     new += db.watch(sources.trending_pools(TRENDING_PAGES), "trending")
     pruned = db.prune()
     watch = db.watched()
     print(f"watchlist: {len(watch)} tokens ({new} new this run, {pruned} aged out)")
+    events.emit("scout", "done", new=new, watchlist=len(watch), aged_out=pruned)
 
     # 1. Market pass: one GeckoTerminal call per 30 tokens, newest first, capped
     todo = [w for w in watch if args.ignore_bench or not db.benched(w["addr"])]
     todo = todo[:MAX_MARKET_CALLS * MULTI_BATCH]
+    events.emit("market", "start", checking=len(todo))
     pools = sources.token_pools([w["addr"] for w in todo])
     kills, survivors, dexes, dropped = Counter(), [], Counter(), 0
     for w in todo:
@@ -64,6 +69,10 @@ def main():
                   f"age {t['age_minutes'] or 0:>6.0f}m  liq {money(t['liquidity_usd']):>7} "
                   f"vol {money(t['volume_h24']):>7}  mcap {money(t['mcap_usd']):>7}  "
                   f"trades {t['trades_h24'] or 0:>5}  -> {k or 'PASS'}")
+        if t is not None and k != "bonding_curve":     # curve tokens are too many to show
+            events.emit("market", "token", ticker=t["ticker"], addr=t["addr"],
+                        result=k or "pass", liq=t["liquidity_usd"], mcap=t["mcap_usd"],
+                        vol24=t["volume_h24"], age=t["age_minutes"], turnover=t["turnover"])
         if k:
             kills[k] += 1
             age = t["age_minutes"] if t else None
@@ -81,6 +90,8 @@ def main():
     for reason, n in kills.most_common():
         print(f"   killed by {reason:<14} {n}")
     print(f"   pools by dex: {dict(dexes.most_common())}")
+    events.emit("market", "done", checked=len(todo), survived=len(survivors),
+                dropped=dropped, kills=dict(kills))
 
     # 2. Dossier pass: the deepest-liquidity candidates get GT info + RPC holders
     # deepest pools first: liquidity is hard to fake, unlike volume
@@ -107,6 +118,10 @@ def main():
         k = chain_kill(d)
         top10, src = ((d["top_10_pct"], "rpc") if d["top_10_pct"] is not None
                       else (d["gt_top_10_pct"], "gt"))
+        events.emit("chain", "token", ticker=d["ticker"], addr=d["addr"], result=k or "pass",
+                    mint=d["mint_authority"], freeze=d["freeze_authority"],
+                    top_wallet=d["top_wallet_pct"], top10=top10, top10_src=src,
+                    pools=d["pool_pct"], holders=d["holder_count"])
         print(f"   {d['ticker']:<12} mint {d['mint_authority']}/freeze {d['freeze_authority']}"
               f"  top wallet {pct(d['top_wallet_pct'])}  top10 {pct(top10)}{'' if top10 is None else ' (' + src + ')'}"
               f"  pools {pct(d['pool_pct'])}  holders {d['holder_count'] or '?'}"
@@ -129,6 +144,9 @@ def main():
     out.mkdir(exist_ok=True)
     (out / "latest.json").write_text(json.dumps(finalists, indent=2, default=str))
     print(f"\n{len(finalists)} finalist(s) written to runs/latest.json")
+    events.emit("chain", "done", checked=min(len(survivors), MAX_DOSSIERS),
+                survived=len(finalists), kills=dict(chain_kills),
+                finalists=[{"ticker": d["ticker"], "addr": d["addr"]} for d in finalists])
     for d in finalists:
         print(f"  {d['ticker']:<12} {d['addr']}\n"
               f"     age {d['age_minutes']:.0f}m  liq {money(d['liquidity_usd'])}  "

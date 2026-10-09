@@ -3,8 +3,8 @@
 How the project works, top to bottom. GitHub renders the diagrams below automatically.
 This file is updated with every phase; see `CHANGELOG.md` for the history.
 
-**Current state:** Phases 1–5 built: the desk runs itself every 15 minutes. Shadow mode only:
-it never holds keys or money.
+**Current state:** Phases 1–5 built: the desk runs itself every 15 minutes. The dashboard is
+being built (step 1 of 4 done). Shadow mode only: it never holds keys or money.
 
 ## 1. The big picture
 
@@ -21,6 +21,10 @@ flowchart TD
     tracked --> scoreRun
     scoreRun --> card["scorecard<br/>picks vs passes vs rejects"]
     cycle --> logs[("journalctl -u jev-desk<br/>every cycle's output")]
+    scan & judgeRun & scoreRun -.-> ev[("runs/events.jsonl<br/>one line per event, 48h")]
+    ev -.-> dash["dashboard/server.py<br/>read-only, port 8080"]
+    tracked -.-> dash
+    dash -.-> browser(["your browser<br/>Nick's Jev Trading Desk"])
 
     subgraph ext["Outside services (read-only)"]
         gt["GeckoTerminal<br/>free, 10 calls/min"]
@@ -57,6 +61,27 @@ sequenceDiagram
     K-->>R: scorecard
     R-->>T: exit 0, or 1 if any step failed
 ```
+
+### The dashboard
+
+```mermaid
+flowchart LR
+    subgraph pi["On the Pi"]
+        steps["run_scan / run_judge / score"] -- "events.emit()" --> log[("runs/events.jsonl")]
+        steps --> files[("desk.db, runs/latest.json,<br/>runs/judged-latest.json")]
+        srv["dashboard/server.py"]
+        log --> srv
+        files -- "read-only" --> srv
+    end
+    srv -- "/api/state every 10 s<br/>/api/events every 3 s" --> page["the page<br/>cards, ticker, charts, thresholds"]
+    srv <-- "candles, cached 5 min,<br/>1 call per 30 s max" --> gt2["GeckoTerminal"]
+```
+
+The dashboard only reads. Each panel maps to a stage: Desk, Scout, Market, Dossier,
+Jev·Market, Jev·Text, Pick and Scorekeeper cards; the ticker shows events as they land;
+the shadow P&L chart is the scorecard as a running total ($100 per token, after cost);
+the analysis panel shows the selected finalist's candles and Jev's answers; the
+thresholds panel shows every number in `thresholds.py` against that token.
 
 ## 2. The scan: from ~140 launches to a handful of finalists
 
@@ -213,6 +238,7 @@ flowchart LR
     end
     subgraph support["Support"]
         th["thresholds.py<br/>every tunable number"]
+        ev2["events.py<br/>event log"]
         db["db.py<br/>watchlist, bench, tracked"]
         su["solana_util.py<br/>wallet vs pool test"]
     end
@@ -224,6 +250,8 @@ flowchart LR
     jd --> qs
     src --> su
     src & fil & db & jd --> th
+    rs & rj & sc --> ev2
+    ds["dashboard/server.py"] --> ev2 & th
 ```
 
 ## 7. Where data lives
@@ -234,6 +262,7 @@ flowchart LR
 | `desk.db` | watchlist, bench and tracked outcomes (SQLite) | no |
 | `runs/latest.json` | finalists from the last scan | no |
 | `runs/judged-*.json` | every Jev answer, model id, and shadow pick; kept 7 days | no |
+| `runs/events.jsonl` | the event log the dashboard reads; kept 48 hours | no |
 | systemd journal | each cycle's output (`journalctl -u jev-desk`) | no |
 | `/etc/systemd/system/jev-desk.*` | the installed timer, from `deploy/` | no (templates are) |
 | everything else | code and docs | yes |
@@ -246,7 +275,10 @@ flowchart LR
 | 2 | Scanner with market and chain checks | done |
 | 3 | Jev judges the finalists | done |
 | 4 | Shadow scorekeeper: every judged token re-priced at 1h / 6h / 24h | done |
-| 5 | Run unattended every 15 minutes (systemd timer) | **built, installing on the Pi** |
-| next | Live dashboard served from the Pi, with an animated view of the pipeline | next |
+| 5 | Run unattended every 15 minutes (systemd timer) | done |
+| D1 | Dashboard: event log, server, every panel on real data | **built, testing on the Pi** |
+| D2 | Dashboard: the look, pixel office and characters | next |
+| D3 | Dashboard: the spider and event-driven animation, with replay | planned |
+| D4 | Dashboard: polish, always-on service, docs | planned |
 | 6 | Review the scorecard (1–2 weeks of data); decide whether execution is worth building | planned |
 | later | Optional X reading via xAI | idea |

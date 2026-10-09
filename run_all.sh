@@ -5,6 +5,7 @@ set -u
 cd "$(dirname "$0")"
 PY=.venv/bin/python
 rc=0
+export JEV_CYCLE="$(date -u +%Y%m%dT%H%M%SZ)"   # shared by every step's events
 
 echo "=== jev-desk cycle $(date -u +%FT%TZ) ==="
 if $PY run_scan.py; then
@@ -14,4 +15,5 @@ else
   rc=1
 fi
 $PY score.py || { echo "!! score failed (exit $?)"; rc=1; }
+$PY -c "import events; events.emit('desk', 'cycle_end', rc=$rc)" || true
 exit $rc

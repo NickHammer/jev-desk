@@ -68,6 +68,17 @@ sudo systemctl disable --now jev-desk.timer     # stop it
 After pulling new code, nothing needs reinstalling: the next cycle uses it. Re-run
 `deploy/install.sh` only if the files in `deploy/` change.
 
+## The dashboard
+
+```bash
+.venv/bin/python dashboard/server.py
+```
+
+Then open **http://raspberry-3-14-15.local:8080** on any computer on your home network
+(or `http://<pi ip>:8080`; `hostname -I` on the Pi shows its IP). It is read-only: it
+shows the desk, it can't change or trade anything. Ctrl+C stops it. A later step makes
+it a service that starts on boot.
+
 See `ARCHITECTURE.md` for diagrams of how it all fits together.
 
 ## Files
@@ -86,6 +97,8 @@ See `ARCHITECTURE.md` for diagrams of how it all fits together.
 | `run_judge.py` | asks Jev about the last scan's finalists, tracks them for scoring |
 | `score.py` | prices tracked tokens at 1h / 6h / 24h and prints the scorecard |
 | `run_all.sh` | one full cycle: scan, judge, score |
+| `events.py` | the event log the dashboard animates from (`runs/events.jsonl`) |
+| `dashboard/` | the dashboard server and page |
 | `deploy/` | systemd timer, service, and `install.sh` |
 | `ARCHITECTURE.md` | diagrams of the whole pipeline |
 | `CHANGELOG.md` | what changed and when |

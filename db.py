@@ -116,11 +116,12 @@ def due_checkpoints() -> list[dict]:
     for name, mins in CHECKPOINTS.items():
         opens = mins * 60
         closes = opens + CHECKPOINT_WINDOW[name] * 60
-        for rid, addr, at in DB.execute(
-                f"SELECT id, addr, judged_at FROM tracked WHERE p_{name} IS NULL "
-                f"AND judged_at + ? <= ? AND judged_at + ? > ?",
+        for rid, addr, at, ticker, verdict, p0 in DB.execute(
+                f"SELECT id, addr, judged_at, ticker, verdict, price0 FROM tracked "
+                f"WHERE p_{name} IS NULL AND judged_at + ? <= ? AND judged_at + ? > ?",
                 (opens, now, closes, now)):
-            out.append({"id": rid, "addr": addr, "checkpoint": name, "judged_at": at})
+            out.append({"id": rid, "addr": addr, "checkpoint": name, "judged_at": at,
+                        "ticker": ticker, "verdict": verdict, "price0": p0})
     return out
 
 

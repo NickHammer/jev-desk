@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).with_name(".env"))
 
 import db                                                     # noqa: E402
+import events                                                 # noqa: E402
 import sources                                                # noqa: E402
 from thresholds import CHECKPOINTS, ROUND_TRIP_COST_PCT       # noqa: E402
 
@@ -30,6 +31,7 @@ SMALL = 30        # below this many results, a group is noise, not evidence
 def update() -> tuple[int, int]:
     """Price every checkpoint that is due. Returns (filled, could_not_price)."""
     due = db.due_checkpoints()
+    events.emit("score", "start", due=len(due))
     if not due:
         return 0, 0
     prices = sources.token_prices(sorted({d["addr"] for d in due}))
@@ -42,6 +44,10 @@ def update() -> tuple[int, int]:
             continue
         db.fill(d["id"], d["checkpoint"], p, (now - d["judged_at"]) / 60)
         filled += 1
+        gross = (p - d["price0"]) / d["price0"] * 100 if d["price0"] else None
+        events.emit("score", "priced", ticker=d["ticker"], addr=d["addr"],
+                    checkpoint=d["checkpoint"], verdict=d["verdict"], gross=gross,
+                    net=None if gross is None else gross - ROUND_TRIP_COST_PCT)
     return filled, missing
 
 
@@ -114,6 +120,7 @@ def main():
         filled, missing = update()
         print(f"priced {filled} checkpoint(s)"
               + (f", {missing} could not be priced (will retry)" if missing else "") + "\n")
+        events.emit("score", "done", priced=filled, unpriceable=missing)
     report()
 
 

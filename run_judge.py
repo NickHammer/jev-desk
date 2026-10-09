@@ -19,6 +19,7 @@ load_dotenv(Path(__file__).with_name(".env"))
 
 import judge                                                    # noqa: E402
 import db                                                       # noqa: E402
+import events                                                   # noqa: E402
 from filter import judge_fails                                  # noqa: E402
 from thresholds import (PICK_MIN_WORTH, PICK_MIN_CONF,          # noqa: E402
                         NO_SOCIAL_CUT, RUN_KEEP_DAYS)
@@ -51,7 +52,9 @@ def main():
     age_min = (time.time() - src.stat().st_mtime) / 60
     print(f"{len(finalists)} finalist(s) from a scan {age_min:.0f} min ago"
           + ("  (stale: consider re-running run_scan.py)" if age_min > 20 else ""))
+    events.emit("jev", "start", finalists=len(finalists))
     if not finalists:
+        events.emit("pick", "decision", pick=None, reason="no finalists from the scan")
         return
 
     usages, models, judged, survivors = [], set(), [], []
@@ -64,6 +67,7 @@ def main():
             sys.exit(f"Jev rejected a question as malformed; fix questions.py: {e}")
         except Exception as e:
             print(f"  {d['ticker']:<12} judge call failed: {e} (skipped, not a pass)")
+            events.emit("jev", "error", ticker=d["ticker"], addr=d["addr"], error=str(e)[:200])
             continue
         usages += [m["usage"], p["usage"]]
         models |= {m["model"], p["model"]}
@@ -84,6 +88,10 @@ def main():
         judged.append(row)
         if not k:
             survivors.append(row)
+        events.emit("jev", "token", ticker=d["ticker"], addr=d["addr"], fails=fails,
+                    shape=shape.get("choice"), crowd=crowd,
+                    answers={name: a.get("noul", a.get("score"))
+                             for name, a in ans.items() if name != "shape"})
 
     # The pick. A choice over one option proves nothing, so one survivor skips it.
     pick, reason = None, None
@@ -126,6 +134,13 @@ def main():
               f"price ${rw['price_usd']}")
     else:
         print(f"NO TRADE: {reason}")
+    events.emit("pick", "decision",
+                pick=None if not pick else {"ticker": pick["row"]["ticker"],
+                                            "addr": pick["row"]["addr"], "via": pick["via"],
+                                            "confidence": pick["confidence"]},
+                reason=reason, passed=len(survivors), judged=len(judged))
+    events.emit("jev", "usage", calls=len(usages), tokens=tokens,
+                cost=tokens / 1e6 * judge.PRICE_PER_MTOK, models=sorted(models))
     print(f"Jev: {len(usages)} calls, {tokens:,} input tokens, "
           f"~${tokens / 1e6 * judge.PRICE_PER_MTOK:.5f}, model {', '.join(sorted(models))}")
 
@@ -155,6 +170,9 @@ def main():
     if benched:
         print("benched: " + ", ".join(f"{t} ({why}, {db.bench_minutes(why)} min)"
                                       for t, why in benched.items()))
+        events.emit("pick", "benched", tokens=[{"ticker": t, "reason": why,
+                                                "minutes": db.bench_minutes(why)}
+                                               for t, why in benched.items()])
 
 
 if __name__ == "__main__":

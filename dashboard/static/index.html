@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nick's Jev Trading Desk</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="frame">
+  <header id="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◆</span>
+      <h1>Nick's Jev Trading Desk</h1>
+      <span class="tag">JEV JUDGES · CODE DECIDES · SHADOW ONLY</span>
+    </div>
+    <div class="right">
+      <span id="mode" class="mode">—</span>
+      <span id="daycount" class="muted">—</span>
+      <span id="clock" class="clock">--:--</span>
+    </div>
+  </header>
+
+  <section id="cards" aria-label="Stages">
+    <!-- filled by app.js -->
+  </section>
+
+  <section id="office" class="panel">
+    <div class="ticker"><div id="ticker-track"></div></div>
+    <div id="office-body">
+      <div class="placeholder">
+        <div class="ph-title">THE FLOOR</div>
+        <div class="muted">pixel office, characters and the spider arrive in step 2–3</div>
+      </div>
+      <div id="chips" aria-label="Finalists"></div>
+    </div>
+  </section>
+
+  <section id="shadow" class="panel">
+    <div class="panel-head">
+      <span>SHADOW P&amp;L · $100 PER TOKEN · AFTER <span id="cost">3</span>% COST</span>
+      <span id="shadow-legend" class="legend"></span>
+    </div>
+    <canvas id="shadow-chart"></canvas>
+    <div id="shadow-note" class="muted small"></div>
+  </section>
+
+  <section id="bottom">
+    <div id="analysis" class="panel">
+      <div class="panel-head"><span>JEV · ANALYSIS</span><span id="an-count" class="pink">—</span></div>
+      <div id="an-token" class="an-token">—</div>
+      <div class="an-body">
+        <canvas id="candles"></canvas>
+        <div id="an-checks" class="checks"></div>
+      </div>
+      <div id="an-list" class="an-list"></div>
+    </div>
+    <div id="thresholds" class="panel">
+      <div class="panel-head"><span>thresholds.py</span><span class="pink">EVERY NUMBER THE DESK BELIEVES</span></div>
+      <div id="th-body" class="code"></div>
+      <div class="pills" id="pills">
+        <span class="muted small">filter.py · the order is the whole point</span>
+        <span class="pill" data-stage="market">market_kill</span>
+        <span class="pill" data-stage="chain">chain_kill</span>
+        <span class="pill" data-stage="jev">judge_kill</span>
+        <span class="pill" data-stage="pick">pick</span>
+      </div>
+    </div>
+  </section>
+
+  <footer class="muted small" id="foot">read-only view of the desk on this Pi · nothing here can trade</footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

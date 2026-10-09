@@ -2,6 +2,33 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-09: Dashboard, step 1 (real data, no animation yet)
+
+### Added
+- **`events.py`**: an event log. Each step of a cycle appends one JSON line per thing
+  that happens to `runs/events.jsonl` (cycle start, tokens found, each market and
+  dossier result, every Jev verdict, the pick, benches, each checkpoint priced, cycle
+  end). Events older than 48 hours are pruned at the start of each scan. Writing an
+  event can never fail a cycle. `run_all.sh` gives every cycle a shared id (`JEV_CYCLE`).
+- **`dashboard/server.py`**: "Nick's Jev Trading Desk", a read-only web server using
+  only Python's standard library plus `requests`. It serves the page and a JSON API
+  (`/api/state`, `/api/events`, `/api/cycle`, `/api/ohlcv`). It opens `desk.db`
+  read-only, serves files only from `dashboard/static/`, and never exposes `.env`.
+  Price candles come from GeckoTerminal, cached 5 minutes and at most one call every
+  30 seconds, so the pipeline keeps its rate budget.
+- **`dashboard/static/`**: the page, laid out like the final design: 8 stage cards
+  (Desk, Scout, Market, Dossier, Jev·Market, Jev·Text, Pick, Scorekeeper), a live
+  event ticker, finalist chips, a shadow P&L chart ($100 per token after the 3% cost,
+  for picks, passes and rejects), a Jev analysis panel with 5-minute candles and each
+  check's PASS/DROP, and a live `thresholds.py` panel with the current token's values.
+  The pixel office, characters and spider come in steps 2 and 3.
+- Every token name and description is escaped before display, since they come from
+  the internet; tested with a token named like an HTML injection.
+
+### Changed
+- `db.due_checkpoints()` also returns each row's ticker, verdict and start price, so
+  priced checkpoints can be logged as events.
+
 ## 2026-10-09: Phase 5, running unattended
 
 ### Added
