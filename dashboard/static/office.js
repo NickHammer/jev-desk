@@ -12,7 +12,14 @@
 //   Office.init(canvasElement, chipsElement)
 //   Office.update(state, {active})   latest /api/state and the stage that is working
 //   Office.setCandles(candles)       5-minute candles for the wall screen
-//   Office.layout()                  stage id -> {x, y} in page coordinates (for step 3)
+//   Office.event(e)                  one live event from /api/events: animate it
+//   Office.replay(events, cycle)     play a finished cycle again, labelled REPLAY
+//   Office.busy()                    true while anything is still animating
+//   Office.layout()                  stage id -> {x, y} in page coordinates
+//
+// The show: every event becomes a step (a speech bubble, a walk, or a trip for the
+// courier cat, an orange cosmic kitten who flies work between desks). Steps play one after another; when events arrive
+// faster than they can be shown, steps speed up instead of falling behind.
 
 const Office = (() => {
   const ROOM = 300, MIN_W = 680, O = 18, SZ = 36; // room height; sprite size and centre
@@ -49,7 +56,7 @@ const Office = (() => {
   const ARMX = { circle: 12, blob: 12, square: 11, triangle: 10, diamond: 9, spiky: 9, bean: 8, ghost: 12 };
 
   let cv, ctx, art, a, bg, overlay, chipsEl, scale = 1, P = null;
-  let S = null, candles = [], active = null, running = false;
+  let S = null, candles = [], active = null, stateActive = null, running = false;
   const sprites = {};
   const seed = (i) => { const x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x); };
 
@@ -509,7 +516,7 @@ const Office = (() => {
     deskItem(i, x, y, t);
     const by = y + 30;
     chair(x, by);
-    return character(id, x, by, t, { typing: true });
+    if (!walkers[id]) character(id, x, by, t, { typing: true });
   }
 
   function headDesk(t) {
@@ -571,8 +578,14 @@ const Office = (() => {
     const ch = CHARS[id], on = active === id, k = ORDER.indexOf(id), e = EYES[ch.shape], s = 12;
     let bob = on ? -Math.abs(Math.round(Math.sin(t * 7 + k) * 2)) : Math.round(Math.sin(t * 1.8 + k) * 0.6);
     if (opt.float) bob = Math.round(Math.sin(t * 2 + k) * 1.5) - 2;
+    if (opt.walking) bob = -Math.abs(Math.round(Math.sin(t * 10) * 2));
     const cx = Math.round(x), cy = Math.round(by - 13 + bob);
+    pos[id] = { x: cx, y: cy };
     if (!opt.float) shadow(cx, by + 1, 12, 2, 0.5);
+    if (opt.walking) {                                 // little feet, one step at a time
+      const st = Math.floor(t * 10) % 2;
+      R(cx - 7, by - 2 - (st ? 2 : 0), 5, 3, C.outline); R(cx + 2, by - 2 - (st ? 0 : 2), 5, 3, C.outline);
+    }
     if (on) glow(cx, cy, 34, ch.color, 0.4 + 0.1 * Math.sin(t * 8));
     g.drawImage(sprites[id], cx - O, cy - O);
     // halo for the two Jev characters
@@ -623,11 +636,372 @@ const Office = (() => {
     return tags[id];
   }
 
+
+  // --- the show: events -> bubbles, walks and courier trips ---------------------------
+  const pos = {};                                    // where each character was drawn
+  const bubbles = {};                                // id -> {text, until}
+  const walkers = {};                                // id -> walk in progress
+  const effects = [];                                // paper balls and falling chips
+  const show = { queue: [], step: null, end: 0, mode: "live", cycle: null, f: 1,
+                 activeId: null, activeUntil: 0 };
+  let now = 0;                                       // seconds, from the animation clock
+  const RAIL = 96, SPEED = 200;                      // the cat flies across at this height, px/s
+  const cat = { x: null, y: null, path: [], cargo: null, speed: SPEED, moving: false, idleSince: 0, trail: [] };
+
+  const money = (x) => x == null ? "?" : x >= 1e6 ? `$${(x / 1e6).toFixed(1)}M` : `$${Math.round(x / 1e3)}k`;
+  const signed = (x) => x == null ? "?" : `${x >= 0 ? "+" : ""}${x.toFixed(1)}%`;
+  const tick = (s) => String(s ?? "?").slice(0, 10);
+  const hueOf = (s) => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
+
+  function station(k) {
+    const d = P.desks[k];
+    if (d) return { x: d.x + 34, y: d.y - 26 };      // floating beside the desk's monitor
+    if (k === "desk") return { x: P.head.x + 28, y: P.head.y - 42 };
+    if (k === "bin") return { x: P.bin.x, y: P.bin.y - 48 };
+    return { x: P.cx + 160, y: 92 };                 // home: hanging beside the right banner
+  }
+  function lastPoint() {
+    for (let i = cat.path.length - 1; i >= 0; i--) if (cat.path[i].x != null) return cat.path[i];
+    return { x: cat.x, y: cat.y };
+  }
+  function goTo(target) {                            // climb, cross the ceiling, drop down
+    const last = lastPoint();
+    if (Math.abs(last.x - target.x) > 1) { cat.path.push({ x: last.x, y: RAIL }, { x: target.x, y: RAIL }); }
+    cat.path.push({ x: target.x, y: target.y });
+  }
+  function tripTime(from, to) {                       // rough seconds for a trip at base speed
+    const a = lastPoint(), b = station(from), c = station(to);
+    const leg = (p, q) => Math.abs(p.x - q.x) > 1 ? Math.abs(p.y - RAIL) + Math.abs(p.x - q.x) + Math.abs(q.y - RAIL) : Math.abs(p.y - q.y);
+    return (leg(a, b) + leg(b, c)) / SPEED + 0.6;
+  }
+  function trip(from, to, cargo) {
+    goTo(station(from));
+    cat.path.push({ act: "pick", cargo, wait: 0.25 });
+    goTo(station(to));
+    cat.path.push({ act: "drop", at: to, wait: 0.25 });
+  }
+
+  function say(id, text, secs) { bubbles[id] = { text, until: now + secs }; }
+  function walk(id, to, hold) {
+    const from = id === "score" ? { x: P.score.x, by: P.score.y }
+                                : { x: P.desks[id].x, by: P.desks[id].y + 30 };
+    const dur = Math.max(0.4, Math.hypot(to.x - from.x, to.by - from.by) / 45 * show.f);
+    walkers[id] = { from, to, t0: now, dur, hold };
+  }
+  function walkerPos(w) {
+    const t = now - w.t0, p = t < w.dur ? t / w.dur : t < w.dur + w.hold ? 1
+      : Math.max(0, 1 - (t - w.dur - w.hold) / w.dur);
+    const moving = t < w.dur || t > w.dur + w.hold;
+    return { x: w.from.x + (w.to.x - w.from.x) * p, by: w.from.by + (w.to.by - w.from.by) * p, moving,
+             done: t > w.dur * 2 + w.hold };
+  }
+  function toss(fromId, good) {                       // a paper ball from a desk into the bin
+    const p = pos[fromId] || { x: P.cx, y: 180 };
+    effects.push({ kind: "arc", x0: p.x + 10, y0: p.y - 6, x1: P.bin.x, y1: P.bin.y - 24, t0: now,
+                   dur: 0.9 * Math.max(0.5, show.f), color: good ? C.paper : "#ffb3be" });
+  }
+
+  // which character works on an event, and what the event looks like on the floor
+  function charFor(e) {
+    return { scout: "scout", market: "market", chain: "chain", jev: "jevm", pick: "pick",
+             score: "score", desk: "desk" }[e.stage] || null;
+  }
+  function plan(e) {                                 // event -> step, or null to skip it
+    const k = `${e.stage}.${e.kind}`;
+    switch (k) {
+      case "scout.start": case "market.start": case "jev.start": case "score.start":
+      case "scout.done": case "market.done": case "chain.done": case "chain.token":
+      case "jev.token": case "jev.error": case "pick.decision": case "score.priced": case "desk.cycle_end":
+        break;
+      case "market.token": if (e.result !== "pass") return null; break;
+      default: return null;
+    }
+    if (k === "score.start" && !e.due) return null;
+    return { e, k };
+  }
+  function base(step) {                              // seconds the step needs at normal speed
+    switch (step.k) {
+      case "scout.done": return tripTime("scout", "market");
+      case "market.done": return tripTime("market", "chain");
+      case "chain.done": return tripTime("chain", "jevm");
+      case "jev.token": return step.e.fails?.length ? 1.3 : tripTime("jevt", "pick");
+      case "pick.decision": return 3.2;
+      case "market.token": case "chain.token": return 0.9;
+      default: return 1.4;
+    }
+  }
+  function begin(step) {
+    const e = step.e, f = show.f, hold = Math.max(1.6, 2.8 * f);
+    cat.speed = SPEED / f;
+    show.activeId = charFor(e);
+    switch (step.k) {
+      case "scout.start":
+        say("desk", show.mode === "replay" ? "replaying a cycle" : "new cycle, go!", hold);
+        say("scout", "scanning launches…", hold); break;
+      case "scout.done":
+        say("scout", `+${e.new ?? 0} new · ${e.watchlist ?? "?"} watched`, hold);
+        trip("scout", "market", { kind: "bundle" }); break;
+      case "market.start": say("market", `checking ${e.checking ?? "?"}`, hold); break;
+      case "market.token": say("market", `${tick(e.ticker)} ✓ liq ${money(e.liq)}`, hold); break;
+      case "market.done":
+        say("market", `${e.survived ?? 0} of ${e.checked ?? 0} passed`, hold);
+        trip("market", "chain", { kind: "bundle" }); break;
+      case "chain.token": {
+        const ok = e.result === "pass";
+        say("chain", `${tick(e.ticker)} ${ok ? "✓ clean" : "✗ " + e.result}`, hold);
+        if (!ok) toss("chain"); break;
+      }
+      case "chain.done":
+        say("chain", `${e.survived ?? 0} finalist${e.survived === 1 ? "" : "s"}`, hold);
+        trip("chain", "jevm", { kind: "bundle" }); break;
+      case "jev.start": say("jevm", `judging ${e.finalists ?? "?"}`, hold); break;
+      case "jev.token": {
+        const fails = e.fails || [];
+        say("jevm", `${tick(e.ticker)}: ${e.shape || "?"}`, hold);
+        say("jevt", fails.length ? `✗ ${fails[0]}${fails.length > 1 ? ` +${fails.length - 1}` : ""}` : "✓ passes", hold);
+        if (fails.length) toss("jevt");               // rejected: into the bin
+        else trip("jevt", "pick", { kind: "chip", addr: e.addr, ticker: e.ticker });   // survivor: to Pick
+        break;
+      }
+      case "jev.error": say("jevm", `${tick(e.ticker)}: no answer`, hold); break;
+      case "pick.decision": {
+        const p = e.pick;
+        say("pick", p ? `would buy ${tick(p.ticker)}` : "no trade", hold + 1.4);
+        walk("pick", { x: P.head.x - 58, by: P.head.y + 44 }, hold);
+        setTimeout(() => say("desk", p ? "noted · shadow buy" : "ok, sit tight", Math.max(1.6, 2.4 * f)),
+                   Math.round(1000 * Math.max(0.6, 1.2 * f)));
+        break;
+      }
+      case "score.start": say("score", `pricing ${e.due}`, hold); break;
+      case "score.priced":
+        say("score", `${tick(e.ticker)} ${e.checkpoint} ${signed(e.net)}`, hold);
+        if (!walkers.score) walk("score", { x: P.scoreboard.x - 40, by: P.score.y }, hold);
+        break;
+      case "desk.cycle_end":
+        say("desk", e.rc ? `cycle failed (rc ${e.rc})` : "cycle done ✓", hold); break;
+    }
+  }
+  function direct(t) {
+    if (show.step && t < show.end) return;
+    show.step = null;
+    if (!show.queue.length) {
+      if (show.mode === "replay" && !Object.keys(walkers).length && !cat.path.length) show.mode = "live";
+      return;
+    }
+    const step = show.queue.shift();
+    if (show.mode === "live") {
+      const q = show.queue.length;
+      show.f = q > 12 ? 0.35 : q > 5 ? 0.6 : 1;
+    }
+    begin(step);
+    const dur = base(step) * show.f;
+    show.step = step; show.start = t; show.end = t + dur; show.activeUntil = t + dur + 0.6;
+  }
+  function stopReplay() {
+    show.queue = []; show.step = null; show.mode = "live"; show.f = 1;
+    for (const k of Object.keys(bubbles)) delete bubbles[k];
+    cat.path = []; cat.cargo = null;
+  }
+  function showActive(t) {
+    if (!show.activeId || t > show.activeUntil) return null;
+    if (show.step?.k === "jev.token") return t < (show.start + show.end) / 2 ? "jevm" : "jevt";
+    return show.activeId;
+  }
+
+  // --- the courier cat ------------------------------------------------------------
+  function moveCat(dt) {
+    if (cat.x == null) { const h = station("home"); cat.x = h.x; cat.y = h.y; }
+    const s = cat;
+    s.moving = false;
+    if (!s.path.length) {
+      const h = station("home");
+      if (now - s.idleSince > 4 && (Math.abs(s.x - h.x) > 1 || Math.abs(s.y - h.y) > 1)) goTo(h);
+      return;
+    }
+    s.idleSince = now;
+    const p = s.path[0];
+    if (p.act) {
+      p.left = (p.left ?? p.wait / show.f * 1) - dt;
+      if (p.left > 0) return;
+      if (p.act === "pick") s.cargo = p.cargo;
+      if (p.act === "drop" && s.cargo) {
+        if (p.at === "bin") effects.push({ kind: "fall", x: s.x, y: s.y + 12, vy: 0, cargo: s.cargo, until: now + 2 });
+        else effects.push({ kind: "plop", x: s.x, y: s.y + 12, t0: now, color: s.cargo.kind === "chip" ? `hsl(${hueOf(s.cargo.addr)} 70% 62%)` : C.paper });
+        s.cargo = null;
+      }
+      s.path.shift(); return;
+    }
+    const dx = p.x - s.x, dy = p.y - s.y, d = Math.hypot(dx, dy), step = s.speed * dt;
+    s.moving = true;
+    if (d <= step) { s.x = p.x; s.y = p.y; s.path.shift(); }
+    else { s.x += (dx / d) * step; s.y += (dy / d) * step; }
+  }
+
+  // the courier cat: an orange cosmic kitten, drawn once into a sprite like the
+  // characters (outline, shading, rim light), then given eyes, paws, tail and stars
+  // each frame
+  const CAT = { base: "#ff8a3d", dark: "#e0662a", deep: "#b84a1c", light: "#ffb36b", rim: "#ffd29a",
+                white: "#fff1e0", pink: "#ff8fb1", eye: "#5ef0ff", star: "#fff7c2", nebula: "#8a6bff" };
+  function catInside(x, y, gr = 0) {
+    const head = (x * x) / ((9 + gr) ** 2) + ((y + 4) ** 2) / ((7 + gr) ** 2) <= 1;
+    const body = (x * x) / ((6 + gr) ** 2) + ((y - 6) ** 2) / ((5 + gr) ** 2) <= 1;
+    const ear = (cx) => {
+      const top = -15 - gr, bot = -7;
+      if (y < top || y > bot) return false;
+      return Math.abs(x - cx) <= ((y - top) / (bot - top)) * (4 + gr) + 0.3;
+    };
+    return head || body || ear(-6.5) || ear(6.5);
+  }
+  function makeCat() {
+    const c = document.createElement("canvas"); c.width = c.height = SZ;
+    const prev = g; g = c.getContext("2d");
+    for (let py = 0; py < SZ; py++) for (let px = 0; px < SZ; px++) {
+      const x = px - O + 0.5, y = py - O + 0.5;
+      if (!catInside(x, y, 1)) continue;
+      let col;
+      if (!catInside(x, y)) col = C.outline;
+      else if (y < -7 && Math.abs(Math.abs(x) - 6.5) <= ((y + 13) / 6) * 2 && y > -13) col = CAT.pink;   // inner ears
+      else if (y < 0 && !catInside(x, y - 1.3)) col = CAT.rim;
+      else if (((x + 3.5) ** 2) / 9 + ((y + 8) ** 2) / 4 <= 1) col = CAT.light;
+      else if (y > 0 && !catInside(x, y + 2)) col = CAT.deep;
+      else if (catInside(x + 1, y + 1.5, -1.5)) col = CAT.base;
+      else col = CAT.dark;
+      R(px, py, 1, 1, col);
+    }
+    // muzzle and chest
+    ellipse(O - 2, O - 1, 2, 1, CAT.white); ellipse(O + 2, O - 1, 2, 1, CAT.white);
+    ellipse(O, O + 6, 3, 3, CAT.white); R(O - 1, O + 4, 3, 1, CAT.white);
+    // forehead: tabby stripes and a little star
+    R(O - 4, O - 10, 1, 2, CAT.deep); R(O + 4, O - 10, 1, 2, CAT.deep);
+    R(O - 6, O - 7, 2, 1, CAT.deep); R(O + 5, O - 7, 2, 1, CAT.deep);
+    diamond(O, O - 9, 1, CAT.star); R(O, O - 9, 1, 1, "#ffffff");
+    // star speckles in the fur
+    for (const [dx, dy] of [[-7, -3], [6, -2], [-4, 8], [4, 9], [7, -5]]) R(O + dx, O + dy, 1, 1, CAT.star);
+    // nose and mouth
+    R(O - 1, O - 2, 2, 1, CAT.pink); R(O - 2, O, 1, 1, C.outline); R(O - 1, O + 1, 1, 1, C.outline);
+    R(O, O, 1, 1, C.outline); R(O + 1, O + 1, 1, 1, C.outline);
+    g = prev;
+    return c;
+  }
+  let catSprite = null;
+
+  function drawCat(t) {
+    const s = cat;
+    if (!catSprite) catSprite = makeCat();
+    const next = s.path.find((q) => q.x != null);
+    const vx = s.moving && next ? Math.sign(next.x - s.x) : 0;
+    const bob = Math.round(Math.sin(t * (s.moving ? 6 : 2)) * (s.moving ? 1 : 2));
+    const x = Math.round(s.x), y = Math.round(s.y) + bob;
+    // a trail of stardust while flying
+    if (s.moving && now - (s.lastDust || 0) > 0.04) {
+      s.lastDust = now;
+      s.trail.push({ x: x + (Math.random() - 0.5) * 6, y: y + 4 + (Math.random() - 0.5) * 6, t0: now,
+                     c: [CAT.star, C.pink, C.cyan, CAT.light][Math.floor(Math.random() * 4)] });
+    }
+    for (let i = s.trail.length - 1; i >= 0; i--) {
+      const d = s.trail[i], age = (now - d.t0) / 0.7;
+      if (age >= 1) { s.trail.splice(i, 1); continue; }
+      g.globalAlpha = 1 - age; R(d.x, d.y + age * 3, age < 0.4 ? 2 : 1, age < 0.4 ? 2 : 1, d.c); g.globalAlpha = 1;
+    }
+    glow(x, y, 26, CAT.nebula, 0.16); glow(x, y, 18, CAT.base, 0.22);
+    // tail: curls up behind, away from where it is flying; the tip glows
+    const side = vx > 0 ? -1 : 1, pts = [];
+    for (let i = 0; i <= 10; i++) {
+      const u = i / 10;
+      pts.push([x + side * (5 + u * 8), y + 7 - u * 11 + Math.sin(u * 3 + t * (s.moving ? 9 : 3)) * 2]);
+    }
+    for (const [px, py] of pts) ellipse(px, py, 2, 2, C.outline);
+    pts.forEach(([px, py], i) => ellipse(px, py, 1, 1, i > 6 && i % 2 ? CAT.deep : CAT.base));
+    const [tx, ty] = pts[pts.length - 1];
+    glow(tx, ty, 7, CAT.star, 0.6); R(tx - 1, ty - 1, 2, 2, CAT.star);
+    g.drawImage(catSprite, x - O, y - O);
+    // whiskers
+    for (const sd of [-1, 1]) {
+      line(x + sd * 9, y - 2, x + sd * 13, y - 3, "rgba(255,241,224,.75)");
+      line(x + sd * 9, y, x + sd * 13, y + 1, "rgba(255,241,224,.75)");
+    }
+    // eyes: big and glowing; happy arcs while flying fast, a blink now and then
+    const blink = (t * 1.1) % 3.7 < 0.12;
+    for (const ex of [-5, 3]) {
+      if (blink) { R(x + ex, y - 5, 3, 1, C.outline); continue; }
+      if (s.moving && s.speed > SPEED * 1.4) {      // ^ ^
+        R(x + ex, y - 5, 1, 1, C.outline); R(x + ex + 1, y - 6, 1, 1, C.outline); R(x + ex + 2, y - 5, 1, 1, C.outline);
+        continue;
+      }
+      R(x + ex, y - 7, 3, 4, C.outline); R(x + ex, y - 7, 3, 3, CAT.eye); R(x + ex + 1, y - 6, 1, 2, "#0b2a4a");
+      R(x + ex, y - 7, 1, 1, "#ffffff");
+    }
+    glow(x - 4, y - 6, 4, CAT.eye, 0.25); glow(x + 4, y - 6, 4, CAT.eye, 0.25);
+    // what it is carrying, held in its front paws
+    if (s.cargo) {
+      if (s.cargo.kind === "chip") {
+        ellipse(x, y + 12, 5, 5, C.outline); ellipse(x, y + 12, 4, 4, `hsl(${hueOf(s.cargo.addr)} 70% 62%)`);
+        R(x - 2, y + 9, 2, 1, "rgba(255,255,255,.6)");
+      } else {
+        for (let i = 0; i < 3; i++) { R(x - 7, y + 9 + i * 2, 14, 3, C.outline); R(x - 6, y + 10 + i * 2, 12, 1, i === 1 ? "#bfc4d4" : C.paper); }
+      }
+    }
+    const pawY = y + (s.cargo ? 10 : 11);
+    for (const px of [-4, 2]) { R(x + px - 1, pawY - 1, 4, 3, C.outline); R(x + px, pawY, 2, 1, CAT.white); }
+    // three little stars orbiting
+    for (let i = 0; i < 3; i++) {
+      const a2 = t * 1.6 + i * 2.1, ox = x + Math.cos(a2) * 15, oy = y - 2 + Math.sin(a2) * 6;
+      const tw = Math.sin(t * 5 + i * 2) > 0;
+      R(ox, oy, 1, 1, CAT.star);
+      if (tw) { R(ox - 1, oy, 3, 1, "rgba(255,247,194,.6)"); R(ox, oy - 1, 1, 3, "rgba(255,247,194,.6)"); }
+    }
+  }
+
+  function drawEffects() {
+    for (let i = effects.length - 1; i >= 0; i--) {
+      const f = effects[i];
+      if (f.kind === "arc") {
+        const p = (now - f.t0) / f.dur;
+        if (p >= 1) { effects.splice(i, 1); continue; }
+        const x = f.x0 + (f.x1 - f.x0) * p, y = f.y0 + (f.y1 - f.y0) * p - 40 * 4 * p * (1 - p);
+        ellipse(x, y, 3, 2, C.outline); ellipse(x, y, 2, 1, f.color);
+      } else if (f.kind === "fall") {
+        f.vy += 0.35; f.y += f.vy;
+        if (f.y > P.bin.y - 28 || now > f.until) { effects.splice(i, 1); continue; }
+        ellipse(f.x, f.y, 5, 5, C.outline);
+        ellipse(f.x, f.y, 4, 4, f.cargo.kind === "chip" ? `hsl(${hueOf(f.cargo.addr)} 70% 62%)` : C.paper);
+      } else if (f.kind === "plop") {
+        const p = (now - f.t0) / 0.5;
+        if (p >= 1) { effects.splice(i, 1); continue; }
+        ring(f.x, f.y, 3 + p * 8, 2 + p * 5, f.color);
+      }
+    }
+  }
+
+  // bubbles: boxes in the art layer, text later at full resolution
+  let boxes = [];
+  function drawBubbles() {
+    boxes = [];
+    ctx.font = `700 ${Math.max(5 * devicePixelRatio, 5 * scale)}px ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace`;
+    for (const [id, b] of Object.entries(bubbles)) {
+      if (now > b.until) { delete bubbles[id]; continue; }
+      const p = pos[id]; if (!p) continue;
+      const w = Math.ceil(ctx.measureText(b.text).width / scale) + 8, h = 11;
+      let x = p.x + 16, y = p.y - 22, left = false;
+      if (x + w > W - 4) { x = p.x - 16 - w; left = true; }
+      R(x - 1, y - 1, w + 2, h + 2, C.outline); R(x, y, w, h, "#f4f6ff"); R(x, y + h - 2, w, 2, "#c9cede");
+      R(x, y, w, 1, "#ffffff"); R(x, y, 2, h, CHARS[id].color);
+      const c0 = left ? x + w - 7 : x + 3;                        // tail toward the speaker
+      for (let i = 0; i < 3; i++) {
+        R(c0 + (left ? i : -i), y + h + 1 + i, 4, 1, C.outline); R(c0 + (left ? i : -i) + 1, y + h + i, 2, 1, "#c9cede");
+      }
+      boxes.push({ x: x + 5, y: y + 5.5, text: b.text });
+    }
+  }
+
   // --- frame -------------------------------------------------------------------------
-  let tags = {};
+  let tags = {}, lastTs = 0;
   function frame(ts) {
-    const t = ts / 1000;
+    const t = ts / 1000, dt = Math.min(0.1, lastTs ? t - lastTs : 0);
+    lastTs = t; now = t;
     if (!P) { requestAnimationFrame(frame); return; }
+    direct(t); moveCat(dt);
+    active = showActive(t) ?? (show.mode === "replay" ? null : stateActive);
     g = a; tags = {};
     a.drawImage(bg, 0, 0);
     a.save(); a.translate(0, TOP);
@@ -639,8 +1013,17 @@ const Office = (() => {
     DESK_ROW.slice(0, 3).forEach((id, i) => desk(id, P.desks[id].x, P.desks[id].y, t, i));
     DESK_ROW.slice(3).forEach((id, i) => desk(id, P.desks[id].x, P.desks[id].y, t, i + 3));
     scoreboard(t);
-    character("score", P.score.x, P.score.y, t);
+    if (!walkers.score) character("score", P.score.x, P.score.y, t);
     P.plants.slice(1).forEach(([x, y], i) => plant(x, y, t, i + 1));
+    for (const [id, w] of Object.entries(walkers)) {   // characters out of their seats
+      const p = walkerPos(w);
+      if (p.done) { delete walkers[id]; continue; }
+      character(id, p.x, p.by, t, { walking: p.moving });
+    }
+    if (show.mode === "replay") {                     // a pink tag under the wall screen
+      R(P.cx - 51, 87, 102, 12, C.outline); R(P.cx - 50, 88, 100, 10, "#2a0f22"); R(P.cx - 50, 88, 100, 1, C.pink);
+    }
+    drawEffects(); drawCat(t); drawBubbles();
     a.restore();
     a.drawImage(overlay, 0, 0);
 
@@ -659,6 +1042,14 @@ const Office = (() => {
   }
 
   function text(t) {
+    for (const b of boxes) label(b.text, b.x, b.y, "#0b0d14", 5, "left");
+    if (cat.cargo?.kind === "chip")
+      label(String(cat.cargo.ticker || "?").slice(0, 2).toUpperCase(), cat.x, cat.y + 12.5 + Math.round(Math.sin(t * (cat.moving ? 6 : 2)) * (cat.moving ? 1 : 2)), "#0b0d14", 3.6);
+    if (show.mode === "replay") {
+      const when = show.cycle ? new Date(show.cycle * 1000) : null;
+      label(`▶ REPLAY${when && !isNaN(when) ? " · cycle of " + when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}`,
+            P.cx, 93, Math.floor(t * 2) % 2 ? C.pink : "#ff8fd3", 4.8);
+    }
     for (const [id, p] of Object.entries(tags)) {
       const on = active === id;
       label(CHARS[id].name, p.x, p.y, on ? "#0b0d14" : CHARS[id].color, 5.2);
@@ -695,6 +1086,12 @@ const Office = (() => {
           sc?.n ? (sc.avg >= 0 ? C.green : C.red) : "#5d6480", 4.6);
   }
 
+  function cycleTime(cycle, evts) {               // cycle ids look like 20261009T194500Z
+    const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(String(cycle || ""));
+    if (m) return Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]) / 1000;
+    return evts?.[0]?.t ?? null;
+  }
+
   function resize() {
     const box = cv.parentElement.getBoundingClientRect(), dpr = devicePixelRatio;
     if (box.width < 10 || box.height < 10) return;
@@ -709,6 +1106,7 @@ const Office = (() => {
     cv.style.width = `${cv.width / dpr}px`; cv.style.height = `${cv.height / dpr}px`;
     art.width = W; art.height = H;
     P = positions(); buildBackground(); buildOverlay();
+    cat.x = null; cat.path = [];               // re-home the cat in the new room
     if (chipsEl) {                                     // finalist chips sit on the left wall board
       const fb = P.finalists, k = scale / dpr;
       Object.assign(chipsEl.style, { left: `${(fb.x + 4) * k}px`, top: `${(fb.y + TOP + 12) * k}px`,
@@ -727,10 +1125,35 @@ const Office = (() => {
       requestAnimationFrame(frame);
     },
     update(state, opts = {}) {
-      S = state; running = !!state.desk?.running; active = opts.active ?? null;
+      S = state; running = !!state.desk?.running; stateActive = opts.active ?? null;
+    },
+    event(e) {
+      if (!P) return;
+      if (show.mode === "replay") stopReplay();
+      const step = plan(e);
+      if (step) show.queue.push(step);
+    },
+    replay(evts, cycle) {
+      if (!P || show.mode === "replay") return;
+      const steps = (evts || []).map(plan).filter(Boolean);
+      if (!steps.length) return;
+      stopReplay();
+      show.mode = "replay"; show.cycle = cycleTime(cycle, evts);
+      const trips = new Set(["scout.done", "market.done", "chain.done"]);
+      const trip_ = (st) => trips.has(st.k) || (st.k === "jev.token" && !st.e.fails?.length);
+      const total = steps.reduce((sum, st) => sum + (trip_(st) ? 2.4 : st.k === "pick.decision" ? 3.2 : 1.2), 0);
+      show.f = Math.max(0.3, Math.min(1, 40 / total));
+      show.queue = steps;
+    },
+    busy() { return show.queue.length > 0 || !!show.step || cat.path.length > 0 || Object.keys(walkers).length > 0; },
+    replaying() { return show.mode === "replay"; },
+    debug() {                                         // for the browser console
+      return { mode: show.mode, queued: show.queue.length, step: show.step?.k, ends_in: +(show.end - now).toFixed(1),
+               speed: show.f, cat_path: cat.path.length, cat_at: [Math.round(cat.x), Math.round(cat.y + TOP)],
+               room_width: W, walkers: Object.keys(walkers) };
     },
     setCandles(cs) { candles = cs || []; },
-    // stage id -> page coordinates of that character (step 3: the spider walks here)
+    // stage id -> page coordinates of that character 
     layout() {
       const r = cv.getBoundingClientRect(), k = r.width / W, out = {};
       if (!P) return out;

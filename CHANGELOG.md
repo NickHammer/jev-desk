@@ -2,6 +2,31 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-09: Dashboard, step 3 (the courier cat and the show)
+
+### Added
+- **The floor now acts out each cycle as it happens.** Every event becomes one step:
+  - **Speech bubbles** with what each stage just did, for example "+31 new · 214
+    watched", "PQC ✗ authority_open", "would buy SENTS".
+  - **The courier cat**, an orange cosmic kitten with glowing eyes, a star on its
+    forehead, a glowing tail tip and orbiting stars. It flies each stage's batch to
+    the next desk, and each token that passes Jev to Pick, holding them in its front
+    paws and leaving a trail of stardust. It floats beside each desk's monitor and
+    waits by the right-hand banner between trips. (This replaces the spider from the
+    original plan.)
+  - **Rejected tokens** are balled up and thrown into the bin.
+  - **Walks:** Pick walks to the head desk to report its decision and the Desk
+    answers. The Scorekeeper walks to the scoreboard when a checkpoint is priced.
+  - The character on the current step glows, so Jev·Market and Jev·Text take turns
+    on each token.
+- **Pacing:** steps play one at a time, and speed up when events arrive faster than
+  they can be shown. Only events that happen while the page is open are animated.
+- **Replay:** between cycles (20 seconds after the page opens, then every 4 minutes)
+  the floor replays the last finished cycle in about 40 seconds. A pink "▶ REPLAY ·
+  cycle of HH:MM" tag shows under the wall screen. A live event stops the replay at
+  once.
+- `Office.debug()` in the browser console shows what the show is doing.
+
 ## 2026-10-09: Dashboard, step 2.1 (new layout, detailed pixel art)
 
 ### Changed

@@ -20,6 +20,9 @@ const VERDICT_COLORS = { pick: "#ffa62b", pass: "#3ddc84", reject: "#ff5a6e" };
 let S = null;              // last /api/state
 let selected = null;       // addr shown in the analysis panel
 let lastEventT = 0;
+const PAGE_LOADED = Date.now() / 1000;
+const REPLAY_FIRST_S = 20, REPLAY_EVERY_S = 240;   // when idle: replay the last cycle
+let replayAt = PAGE_LOADED + REPLAY_FIRST_S;
 const tickerLines = [];
 
 // --- helpers -----------------------------------------------------------------
@@ -182,6 +185,7 @@ async function pollEvents() {
     const evts = await (await fetch(`/api/events?since=${lastEventT || Date.now() / 1000 - 6 * 3600}`)).json();
     for (const e of evts) {
       lastEventT = Math.max(lastEventT, e.t);
+      if (e.t > PAGE_LOADED - 30) Office.event(e);     // animate only what happens while you watch
       const line = describe(e);
       if (line) tickerLines.push(line);
     }
@@ -347,4 +351,16 @@ setInterval(() => S && Office.update(S, { active: activeStage() }), 500);
 tickClock(); setInterval(tickClock, 1000);
 pollState(); setInterval(pollState, 10000);
 pollEvents(); setInterval(pollEvents, 3000);
+
+// Between cycles the floor replays the last finished cycle every few minutes.
+async function maybeReplay() {
+  const t = Date.now() / 1000;
+  if (!S || S.desk?.running || Office.busy() || t < replayAt) return;
+  replayAt = t + REPLAY_EVERY_S;
+  try {
+    const r = await (await fetch("/api/cycle")).json();
+    if (!S.desk?.running) Office.replay(r.events, r.cycle);
+  } catch (_) { /* try again next time */ }
+}
+setInterval(maybeReplay, 5000);
 addEventListener("resize", () => S && (renderShadow(), renderAnalysis()));

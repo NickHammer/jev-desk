@@ -4,7 +4,7 @@ How the project works, top to bottom. GitHub renders the diagrams below automati
 This file is updated with every phase; see `CHANGELOG.md` for the history.
 
 **Current state:** Phases 1–5 built: the desk runs itself every 15 minutes. The dashboard is
-being built (steps 1–2 of 4 done). Shadow mode only: it never holds keys or money.
+being built (steps 1–3 of 4 done). Shadow mode only: it never holds keys or money.
 
 ## 1. The big picture
 
@@ -124,6 +124,40 @@ the room keeps its minimum width and the ceiling gets higher instead.
 | Jev·Text | teal diamond with a halo | desk 5 | text being read |
 | Pick | orange spiky with a star | desk 6 | three candidates, one chosen |
 | Scorekeeper | violet bean with a clipboard | by the scoreboard | — |
+
+**The show** (also `office.js`) turns events into animation. Each live event from
+`/api/events` becomes one step: a speech bubble, a character walking somewhere, or a
+trip for **the courier cat**, an orange cosmic kitten. It flies work between desks,
+holding it in its front paws, and leaves a trail of stardust. Steps play one at a time, and when events arrive faster
+than they can be shown the steps speed up rather than fall behind. Only events that
+happen while the page is open are animated.
+
+Between cycles, after 20 seconds and then every 4 minutes, the page replays the last
+finished cycle (`/api/cycle`) in about 40 seconds. A pink **REPLAY** tag sits under the
+wall screen while it plays, and a live event stops the replay at once.
+
+```mermaid
+flowchart LR
+    ev["/api/events<br/>(every 3 s)"] --> q["step queue"]
+    cyc["/api/cycle<br/>(idle: replay)"] --> q
+    q --> b["speech bubbles"]
+    q --> sp["courier cat trips"]
+    q --> w["walks"]
+    q --> act["who glows"]
+```
+
+| Event | On the floor |
+|---|---|
+| `scout.start` | Desk: "new cycle, go!" · Scout: "scanning launches…" |
+| `scout.done` | Scout reports new launches; the cat flies the batch to Market |
+| `market.token` (passes only) | Market: ticker ✓ and its liquidity |
+| `market.done` | Market reports how many passed; the cat flies them to Dossier |
+| `chain.token` | Dossier: ✓ clean, or ✗ reason and a paper ball into the bin |
+| `chain.done` | Dossier reports the finalists; the cat flies them to Jev·Market |
+| `jev.token` | Jev·Market says the launch shape, Jev·Text the verdict. A reject is balled up into the bin; the cat flies a survivor's chip to Pick |
+| `pick.decision` | Pick walks to the head desk: "would buy X" or "no trade"; the Desk answers |
+| `score.priced` | Scorekeeper walks to the scoreboard: ticker, checkpoint, result after cost |
+| `desk.cycle_end` | Desk: "cycle done ✓" (or the failure code) |
 
 The dashboard only reads. Each card maps to a stage. The ticker shows events as they
 land. The shadow P&L chart is the scorecard as a running total ($100 per token, after
@@ -325,8 +359,8 @@ flowchart LR
 | 5 | Run unattended every 15 minutes (systemd timer) | done |
 | D1 | Dashboard: event log, server, every panel on real data | done |
 | D2 | Dashboard: the look, pixel office and characters | done |
-| D2.1 | Dashboard: cards on the left, detailed pixel-art floor | **built, testing** |
-| D3 | Dashboard: the spider and event-driven animation, with replay | next |
-| D4 | Dashboard: polish, always-on service, docs | planned |
+| D2.1 | Dashboard: cards on the left, detailed pixel-art floor | done |
+| D3 | Dashboard: the courier cat and event-driven animation, with replay | **built, testing** |
+| D4 | Dashboard: polish, always-on service, docs | next |
 | 6 | Review the scorecard (1–2 weeks of data); decide whether execution is worth building | planned |
 | later | Optional X reading via xAI | idea |
