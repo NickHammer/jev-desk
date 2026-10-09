@@ -92,6 +92,23 @@ def token_pools(addrs: list[str]) -> dict[str, list[dict]]:
     return out
 
 
+def token_prices(addrs: list[str]) -> dict[str, float | None]:
+    """Current USD price per token, 30 tokens per GeckoTerminal call. Used by score.py."""
+    out: dict[str, float | None] = {a: None for a in addrs}
+    for i in range(0, len(addrs), MULTI_BATCH):
+        chunk = addrs[i:i + MULTI_BATCH]
+        resp = _gt(f"/networks/solana/tokens/multi/{','.join(chunk)}")
+        for tok in resp.get("data") or []:
+            a = tok.get("attributes") or {}
+            try:
+                price = float(a.get("price_usd"))
+            except (TypeError, ValueError):
+                price = None
+            if a.get("address") in out:
+                out[a["address"]] = price
+    return out
+
+
 # --- Dossier: GeckoTerminal token info + Solana RPC holder concentration -----
 
 def gt_token_info(addr: str) -> dict:

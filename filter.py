@@ -55,26 +55,30 @@ def chain_kill(d: dict) -> str | None:
     return None
 
 
-def judge_kill(ans: dict) -> str | None:
-    """Pass three: Jev's answers against SOFT in thresholds.py. First failure wins.
-    A question that wasn't answered fails too: missing is missing, not a pass."""
+def judge_fails(ans: dict) -> list[str]:
+    """Pass three: Jev's answers against SOFT in thresholds.py. Returns EVERY check that
+    failed, in a fixed order, so tuning can see the full picture. An unanswered
+    question fails too: missing is missing, not a pass."""
+    fails = []
     for name, (direction, limit) in SOFT.items():
-        a = ans.get(name)
-        if a is None:
-            return f"{name}_missing"
+        a = ans.get(name) or {}
         v = a.get("noul", a.get("score"))
         if v is None:
-            return f"{name}_missing"
-        if direction == "max" and v > limit:
-            return name
-        if direction == "min" and v < limit:
-            return name
+            fails.append(f"{name}_missing")
+        elif (direction == "max" and v > limit) or (direction == "min" and v < limit):
+            fails.append(name)
 
     shape = ans.get("shape")
     if shape is None:
-        return "shape_missing"
-    if shape.get("choice") in ("fading", "one_buyer", "too_early"):
-        return f"shape_{shape['choice']}"
-    if (shape.get("probabilities") or {}).get("crowd", 0) < SHAPE_MIN_CROWD:
-        return "shape_weak"
-    return None
+        fails.append("shape_missing")
+    elif shape.get("choice") in ("fading", "one_buyer", "too_early"):
+        fails.append(f"shape_{shape['choice']}")
+    elif (shape.get("probabilities") or {}).get("crowd", 0) < SHAPE_MIN_CROWD:
+        fails.append("shape_weak")
+    return fails
+
+
+def judge_kill(ans: dict) -> str | None:
+    """The first failed check, or None if the token passed everything."""
+    fails = judge_fails(ans)
+    return fails[0] if fails else None

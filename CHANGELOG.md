@@ -2,6 +2,30 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-08: Phase 4, the shadow scorekeeper
+
+### Added
+- **`score.py`**: prices every judged token 1h, 6h and 24h after its judgement and
+  prints a scorecard. Returns are shown after an assumed 3% round-trip cost, split by
+  verdict (`pick`, `pass`, `reject`), plus a table of how rejected tokens did under each
+  check that fired. That answers whether the rejected tokens really do worse and
+  whether any single check throws away winners. `--no-update` prints without pricing.
+- **Every judged token is tracked**, not only picks, so a run with no trade still
+  produces evidence. A token judged again within 24 hours isn't tracked twice; a pick
+  is always recorded.
+- **`tracked` table in `desk.db`**, created automatically on the next run. It stores
+  the judged price, the verdict, every failed check, and each checkpoint's price with
+  the minutes that had actually passed.
+- **`sources.token_prices()`**: current prices for 30 tokens per GeckoTerminal call.
+- **Phase 4 settings in `thresholds.py`**: `CHECKPOINTS`, `ROUND_TRIP_COST_PCT`,
+  `TRACK_DEDUP_HOURS`, and `GIVE_UP_FACTOR` (a checkpoint not priced within 3x its delay
+  is abandoned rather than filled late with a misleading price).
+
+### Changed
+- **`run_judge.py` shows every failed check** for each token, not just the first, and
+  saves the full list (`fails`) in `runs/judged-*.json`.
+- `filter.judge_fails()` returns all failures; `judge_kill()` now wraps it.
+
 ## 2026-10-08: Phase 3, Jev judges the finalists
 
 ### Added

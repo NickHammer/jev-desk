@@ -36,6 +36,17 @@ python run_scan.py && python run_judge.py
 and a shadow `WOULD BUY` or `NO TRADE`. Results are saved under `runs/`.
 Each run costs a fraction of a cent.
 
+## Score the shadow picks (Phase 4)
+
+```bash
+python run_scan.py && python run_judge.py && python score.py
+```
+
+Every judged token's price is saved; `score.py` re-prices them 1h, 6h and 24h later
+and prints a scorecard: how picks, passes and rejects actually did after a 3% trading
+cost, and how tokens rejected by each check did. Run it often (Phase 5 will automate
+this). Checkpoints missed by more than 3x their delay are skipped, not filled late.
+
 See `ARCHITECTURE.md` for diagrams of how it all fits together.
 
 ## Files
@@ -46,12 +57,13 @@ See `ARCHITECTURE.md` for diagrams of how it all fits together.
 | `sources.py` | GeckoTerminal and Solana RPC clients, rate-limited |
 | `collect.py` | turns API responses into the desk's field names |
 | `filter.py` | the plain-fact checks, then the checks on Jev's answers |
-| `db.py` | watchlist and bench, in `desk.db` |
+| `db.py` | watchlist, bench and tracked outcomes, in `desk.db` |
 | `solana_util.py` | tells real wallets from pools (on-curve check) |
 | `run_scan.py` | one full scan |
 | `questions.py` | every question Jev is asked |
 | `judge.py` | the only code that calls Jev; builds the state it sees |
-| `run_judge.py` | asks Jev about the last scan's finalists |
+| `run_judge.py` | asks Jev about the last scan's finalists, tracks them for scoring |
+| `score.py` | prices tracked tokens at 1h / 6h / 24h and prints the scorecard |
 | `ARCHITECTURE.md` | diagrams of the whole pipeline |
 | `CHANGELOG.md` | what changed and when |
 

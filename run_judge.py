@@ -18,7 +18,8 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).with_name(".env"))
 
 import judge                                                    # noqa: E402
-from filter import judge_kill                                   # noqa: E402
+import db                                                       # noqa: E402
+from filter import judge_fails                                  # noqa: E402
 from thresholds import (PICK_MIN_WORTH, PICK_MIN_CONF,          # noqa: E402
                         NO_SOCIAL_CUT)
 
@@ -56,7 +57,8 @@ def main():
         usages += [m["usage"], p["usage"]]
         models |= {m["model"], p["model"]}
         ans = {**m["answers"], **p["answers"]}
-        k = judge_kill(ans)
+        fails = judge_fails(ans)
+        k = fails[0] if fails else None
         shape = ans.get("shape") or {}
         crowd = (shape.get("probabilities") or {}).get("crowd")
         print(f"  {d['ticker'][:12]:<12} {str(shape.get('choice'))[:10]:<10} "
@@ -64,8 +66,9 @@ def main():
               f"{num(ans, 'liquidity_fits_ticket')} {num(ans, 'momentum_already_spent')} "
               f"{num(ans, 'concentration_is_exit_risk')} {num(ans, 'dev_still_loaded')} "
               f"{num(ans, 'wash_trading')} {num(ans, 'effort')}  {num(ans, 'copycat')} "
-              f" -> {k or 'PASS'}")
-        row = {"addr": d["addr"], "ticker": d["ticker"], "kill": k, "answers": ans,
+              f" -> {', '.join(fails) or 'PASS'}")
+        row = {"addr": d["addr"], "ticker": d["ticker"], "kill": k, "fails": fails,
+               "answers": ans,
                "price_usd": d.get("price_usd"), "dossier": d}
         judged.append(row)
         if not k:
@@ -127,6 +130,14 @@ def main():
     for name in (f"judged-{stamp}.json", "judged-latest.json"):
         (RUNS / name).write_text(json.dumps(out, indent=2, default=str))
     print(f"saved runs/judged-{stamp}.json")
+
+    # Phase 4: remember every judged token's price so score.py can check it later
+    picked = pick["row"]["addr"] if pick else None
+    added = db.track(
+        [{"addr": r["addr"], "ticker": r["ticker"], "price0": r["price_usd"],
+          "verdict": "pick" if r["addr"] == picked else ("pass" if not r["kill"] else "reject"),
+          "fails": r["fails"]} for r in judged], run=stamp)
+    print(f"tracking {added} new token(s) for scoring (run `python score.py`)")
 
 
 if __name__ == "__main__":

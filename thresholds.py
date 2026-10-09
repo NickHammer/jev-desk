@@ -70,3 +70,9 @@ SHAPE_MIN_CROWD = 0.55       # probabilities["crowd"], not just the winning labe
 PICK_MIN_WORTH  = 0.60       # "is any of these worth trading at all?"
 PICK_MIN_CONF   = 0.55       # confidence of the best pick
 NO_SOCIAL_CUT   = 0.60       # we never read the X account itself, so size is always cut
+
+# --- Phase 4: scorekeeper -----------------------------------------------------
+CHECKPOINTS = {"1h": 60, "6h": 360, "24h": 1440}   # minutes after the judgement
+ROUND_TRIP_COST_PCT = 3.0    # assumed fees + slippage to buy and sell a fresh token
+TRACK_DEDUP_HOURS = 24       # a token judged again within this window isn't re-tracked
+GIVE_UP_FACTOR = 3           # stop trying to price a checkpoint after 3x its delay
