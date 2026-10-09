@@ -23,6 +23,8 @@ def market_kill(t: dict) -> str | None:
         return "mcap"
     if (t["trades_h24"] or 0) < HARD["min_trades_h24"]:
         return "trades"
+    if t["turnover"] is not None and t["turnover"] > HARD["max_turnover"]:
+        return "turnover"                          # volume far beyond the token's value
     if t["sells_h1"] == 0 and (t["buys_h1"] or 0) > 20:
         return "no_sells"                          # buys going through, sells are not
     return None
@@ -35,12 +37,14 @@ def _open(value) -> bool:
 
 
 def chain_kill(d: dict) -> str | None:
-    """Pass two, after the dossier. Unknown values (None) never pass as fine, but they
-    don't kill either; they travel on to the judge as missing data."""
+    """Pass two, after the dossier. Safety facts we couldn't read (authorities, holder
+    concentration) reject the token with a short bench; we never trade blind."""
     if _open(d["mint_authority"]) or _open(d["freeze_authority"]):
         return "authority_open"
     if d["mint_authority"] is None or d["freeze_authority"] is None:
         return "authority_unknown"                 # never trade a mint we couldn't read
+    if d["top_wallet_pct"] is None:
+        return "holders_unknown"                   # RPC holder lookup failed
     if d["top_wallet_pct"] is not None and d["top_wallet_pct"] > HARD["max_top_wallet"]:
         return "top_wallet"
     top10 = d["top_10_pct"] if d["top_10_pct"] is not None else d["gt_top_10_pct"]

@@ -22,7 +22,8 @@ from thresholds import (NEW_POOL_PAGES, TRENDING_PAGES, MAX_DOSSIERS,  # noqa: E
                         MULTI_BATCH, MAX_MARKET_CALLS, STALE_HOURS)
 
 # failures that won't fix themselves on an old token: stop watching it entirely
-STALE_REASONS = {"liquidity", "volume", "trades", "mcap", "bonding_curve", "no_pair"}
+STALE_REASONS = {"liquidity", "volume", "trades", "mcap", "bonding_curve", "no_pair",
+                 "turnover"}
 
 
 def money(x):
@@ -81,9 +82,9 @@ def main():
         print(f"   killed by {reason:<14} {n}")
     print(f"   pools by dex: {dict(dexes.most_common())}")
 
-    # 2. Dossier pass: the best candidates by turnover get GT info + RPC holders
-    survivors.sort(key=lambda t: (t["volume_h24"] or 0) / max(t["mcap_usd"] or 1, 1),
-                   reverse=True)
+    # 2. Dossier pass: the deepest-liquidity candidates get GT info + RPC holders
+    # deepest pools first: liquidity is hard to fake, unlike volume
+    survivors.sort(key=lambda t: t["liquidity_usd"] or 0, reverse=True)
     finalists, chain_kills = [], Counter()
     for t in survivors[:MAX_DOSSIERS]:
         try:
@@ -104,8 +105,10 @@ def main():
             conc = None
         d = add_dossier(t, info, conc, auth)
         k = chain_kill(d)
+        top10, src = ((d["top_10_pct"], "rpc") if d["top_10_pct"] is not None
+                      else (d["gt_top_10_pct"], "gt"))
         print(f"   {d['ticker']:<12} mint {d['mint_authority']}/freeze {d['freeze_authority']}"
-              f"  top wallet {pct(d['top_wallet_pct'])}  top10 {pct(d['top_10_pct'])}"
+              f"  top wallet {pct(d['top_wallet_pct'])}  top10 {pct(top10)}{'' if top10 is None else ' (' + src + ')'}"
               f"  pools {pct(d['pool_pct'])}  holders {d['holder_count'] or '?'}"
               f"  -> {k or 'PASS'}")
         if k:

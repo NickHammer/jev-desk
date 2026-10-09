@@ -44,6 +44,8 @@ def from_pools(addr: str, symbol: str, pools: list[dict],
                if (e := _epoch((p.get("attributes") or {}).get("pool_created_at")))]
     starts = created + ([first_seen] if first_seen else [])
     buys_h24, sells_h24 = tx("h24", "buys"), tx("h24", "sells")
+    mcap = _num(a.get("market_cap_usd")) or _num(a.get("fdv_usd"))
+    vol24 = _num(vol.get("h24"))
     return {
         "addr": addr,
         "ticker": symbol or (a.get("name") or "?").split(" / ")[0],
@@ -51,8 +53,8 @@ def from_pools(addr: str, symbol: str, pools: list[dict],
         "pool_addr": a.get("address"),
         "price_usd": _num(a.get("base_token_price_usd")),
         "liquidity_usd": _num(a.get("reserve_in_usd")),
-        "mcap_usd": _num(a.get("market_cap_usd")) or _num(a.get("fdv_usd")),
-        "volume_h24": _num(vol.get("h24")),
+        "mcap_usd": mcap,
+        "volume_h24": vol24,
         "volume_h6": _num(vol.get("h6")),
         "volume_h1": _num(vol.get("h1")),
         "buys_h1": tx("h1", "buys"), "sells_h1": tx("h1", "sells"),
@@ -60,6 +62,8 @@ def from_pools(addr: str, symbol: str, pools: list[dict],
         "trades_h24": (buys_h24 or 0) + (sells_h24 or 0)
                       if buys_h24 is not None or sells_h24 is not None else None,
         "change": {w: _num(chg.get(w)) for w in ("m5", "h1", "h6", "h24")},
+        # how many times its own value changed hands today; very high = likely wash trading
+        "turnover": vol24 / mcap if vol24 is not None and mcap else None,
         # the earliest evidence of the token: its first pool, or when we first saw it
         "age_minutes": (time.time() - min(starts)) / 60 if starts else None,
     }

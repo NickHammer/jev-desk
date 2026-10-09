@@ -37,6 +37,7 @@ Run it again every 15 minutes or so and the watchlist fills up.
 | `db.py` | watchlist and bench, in `desk.db` |
 | `solana_util.py` | tells real wallets from pools (on-curve check) |
 | `run_scan.py` | one full scan |
+| `CHANGELOG.md` | what changed and when |
 
 ## Fixes vs. the original guide
 

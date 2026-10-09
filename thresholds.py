@@ -11,6 +11,7 @@ HARD = {
     "min_mcap_usd":      60_000,
     "max_mcap_usd":      8_000_000,
     "min_trades_h24":    150,
+    "max_turnover":      20,         # 24h volume / mcap above this looks like wash trading
     # --- Chain checks (from GeckoTerminal + Solana RPC; one dossier per token) ---
     "max_top_wallet":    0.05,       # largest real wallet's share of supply (pools excluded)
     "max_top_10":        0.60,       # top 10 real wallets' combined share
@@ -37,11 +38,13 @@ STALE_HOURS    = 6    # a token still failing liquidity/volume after this long i
 # --- How long a rejection stands, by the check that fired (minutes) -----------
 BENCH_MINUTES = {
     # facts that will not change while the token exists
-    "authority_open": 100_000, "authority_unknown": 20, "top_wallet": 100_000, "too_old": 100_000,
+    "authority_open": 100_000, "top_wallet": 100_000, "too_old": 100_000,
+    # we couldn't read the data this time; try again soon
+    "authority_unknown": 20, "holders_unknown": 20,
     # can change as the float moves
     "top_10": 90, "holders": 90,
     # can change inside the hour; keep short or you miss the token maturing
-    "liquidity": 25, "volume": 25, "mcap": 25, "trades": 25, "no_sells": 25,
+    "liquidity": 25, "volume": 25, "mcap": 25, "trades": 25, "no_sells": 25, "turnover": 25,
     "bonding_curve": 15, "no_pair": 10, "dossier_failed": 20,
 }
 DEFAULT_BENCH = 45
