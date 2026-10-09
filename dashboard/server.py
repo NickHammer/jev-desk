@@ -131,6 +131,14 @@ def cycle_summary(evts):
     return s
 
 
+def merge_stages(old: dict, new: dict) -> dict:
+    """Per stage and per event kind, the newest wins; older kinds fill the gaps."""
+    out = {k: dict(v) for k, v in old.items()}
+    for stage, kinds in new.items():
+        out.setdefault(stage, {}).update(kinds)
+    return out
+
+
 def state():
     now = time.time()
     recent = events.read(since=now - 24 * 3600)
@@ -163,7 +171,10 @@ def state():
                                      if cycles[cid][0]["t"] >= midnight),
                  "last_end": next((e for e in reversed(recent)
                                    if e["kind"] == "cycle_end"), None)},
-        "stages": cycle_summary(shown),
+        # while a cycle runs, anything it hasn't reported yet keeps the last finished results
+        "stages": merge_stages(cycle_summary(cycles[finished[-1]]) if running and finished
+                               and finished[-1] != shown_id else {}, cycle_summary(shown)),
+        "live_stages": list(cycle_summary(shown)) if running else [],
         "finalists": finalists,
         "judged_at": judged.get("at"), "models": judged.get("models"),
         "pick": judged.get("pick"), "no_trade_reason": judged.get("no_trade_reason"),

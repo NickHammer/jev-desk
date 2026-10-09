@@ -2,6 +2,32 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-09: Dashboard, step 2 (the look, the office, the characters)
+
+### Added
+- **`dashboard/static/office.js`**: "the floor", a pixel-art office drawn entirely in
+  code (no image files): a wall screen showing the selected finalist's real 5-minute
+  candles, banners with the desk's diamond mark, a clock, a "today" board (cycles,
+  tokens judged, picks, Jev spend), six desks with live monitors, a head desk, a
+  scoreboard with a rocket trophy and the 1h average, a blinking server rack (busier
+  while a cycle runs), a "rejected" bin that fills as tokens are rejected, plants and a
+  break-corner couch.
+- **One original character per stage**, each with its own shape and color, matching
+  its card's icon: Desk (ghost with a headset, head of the floor), Scout (circle),
+  Market (blob), Dossier (square), Jev·Market (triangle), Jev·Text (diamond), Pick
+  (spiky) and Scorekeeper (bean). They idle, blink and bob; while a cycle runs, the
+  character for the stage that is working glows, bounces and lights up its monitor and
+  card.
+- Finalist chips sit on the office wall; hover for the verdict, click to show that
+  token in the analysis and thresholds panels and on the wall screen.
+- The pink frame has a subtle grid, as in the reference design.
+
+### Changed
+- While a cycle is running, stage cards keep the last finished cycle's results for
+  anything the new cycle hasn't reported yet, instead of going blank.
+- `/api/state` also returns `live_stages`, the stages the running cycle has reached.
+- Chart axis labels no longer overlap the $0 line.
+
 ## 2026-10-09: Dashboard, step 1 (real data, no animation yet)
 
 ### Added

@@ -4,7 +4,7 @@ How the project works, top to bottom. GitHub renders the diagrams below automati
 This file is updated with every phase; see `CHANGELOG.md` for the history.
 
 **Current state:** Phases 1–5 built: the desk runs itself every 15 minutes. The dashboard is
-being built (step 1 of 4 done). Shadow mode only: it never holds keys or money.
+being built (steps 1–2 of 4 done). Shadow mode only: it never holds keys or money.
 
 ## 1. The big picture
 
@@ -76,6 +76,20 @@ flowchart LR
     srv -- "/api/state every 10 s<br/>/api/events every 3 s" --> page["the page<br/>cards, ticker, charts, thresholds"]
     srv <-- "candles, cached 5 min,<br/>1 call per 30 s max" --> gt2["GeckoTerminal"]
 ```
+
+**The floor** (`office.js`) is a pixel-art office drawn in code. Each stage has a
+character and a desk; the one whose stage is running glows and works its monitor:
+
+| Stage | Character | Where |
+|---|---|---|
+| Desk (the cycle) | white ghost with a headset | head desk |
+| Scout | blue circle | desk 1 |
+| Market | green blob | desk 2 |
+| Dossier | red square | desk 3 |
+| Jev·Market | pink triangle | desk 4 |
+| Jev·Text | teal diamond | desk 5 |
+| Pick | orange spiky | desk 6 |
+| Scorekeeper | violet bean | by the scoreboard |
 
 The dashboard only reads. Each panel maps to a stage: Desk, Scout, Market, Dossier,
 Jev·Market, Jev·Text, Pick and Scorekeeper cards; the ticker shows events as they land;
@@ -276,9 +290,9 @@ flowchart LR
 | 3 | Jev judges the finalists | done |
 | 4 | Shadow scorekeeper: every judged token re-priced at 1h / 6h / 24h | done |
 | 5 | Run unattended every 15 minutes (systemd timer) | done |
-| D1 | Dashboard: event log, server, every panel on real data | **built, testing on the Pi** |
-| D2 | Dashboard: the look, pixel office and characters | next |
-| D3 | Dashboard: the spider and event-driven animation, with replay | planned |
+| D1 | Dashboard: event log, server, every panel on real data | done |
+| D2 | Dashboard: the look, pixel office and characters | **built, testing on the Pi** |
+| D3 | Dashboard: the spider and event-driven animation, with replay | next |
 | D4 | Dashboard: polish, always-on service, docs | planned |
 | 6 | Review the scorecard (1–2 weeks of data); decide whether execution is worth building | planned |
 | later | Optional X reading via xAI | idea |

@@ -1,16 +1,16 @@
-// Nick's Jev Trading Desk: dashboard front end (step 1: real data, no animation yet).
+// Nick's Jev Trading Desk: dashboard front end (step 2: real data + the pixel office).
 // Every token name, ticker and description comes from the internet, so all of it is
 // escaped before it touches the page.
 
 const STAGES = [
-  { id: "desk",   name: "DESK",        c: "#ffffff", sub: "runs the cycle every 15 min" },
-  { id: "scout",  name: "SCOUT",       c: "#3b82f6", sub: "finds new launches" },
-  { id: "market", name: "MARKET",      c: "#3ddc84", sub: "liquidity, volume, turnover" },
-  { id: "chain",  name: "DOSSIER",     c: "#ff5a6e", sub: "authorities, whales, holders" },
-  { id: "jevm",   name: "JEV·MARKET",  c: "#ff4fb8", sub: "shape, momentum, wash", jev: true },
-  { id: "jevt",   name: "JEV·TEXT",    c: "#2dd4bf", sub: "effort, copycat", jev: true },
-  { id: "pick",   name: "PICK",        c: "#ffa62b", sub: "one token, or none", jev: true },
-  { id: "score",  name: "SCOREKEEPER", c: "#b98cff", sub: "prices at 1h / 6h / 24h" },
+  { id: "desk",   name: "DESK",        c: "#ffffff", shape: "ghost",    sub: "runs the cycle every 15 min" },
+  { id: "scout",  name: "SCOUT",       c: "#3b82f6", shape: "circle",   sub: "finds new launches" },
+  { id: "market", name: "MARKET",      c: "#3ddc84", shape: "blob",     sub: "liquidity, volume, turnover" },
+  { id: "chain",  name: "DOSSIER",     c: "#ff5a6e", shape: "square",   sub: "authorities, whales, holders" },
+  { id: "jevm",   name: "JEV·MARKET",  c: "#ff4fb8", shape: "triangle", sub: "shape, momentum, wash", jev: true },
+  { id: "jevt",   name: "JEV·TEXT",    c: "#2dd4bf", shape: "diamond",  sub: "effort, copycat", jev: true },
+  { id: "pick",   name: "PICK",        c: "#ffa62b", shape: "spiky",    sub: "one token, or none", jev: true },
+  { id: "score",  name: "SCOREKEEPER", c: "#b98cff", shape: "bean",     sub: "prices at 1h / 6h / 24h" },
 ];
 const MARKET_Q = ["liquidity_fits_ticket", "momentum_already_spent", "concentration_is_exit_risk",
                   "dev_still_loaded", "wash_trading"];
@@ -40,7 +40,7 @@ const short = (s, n = 10) => { s = String(s ?? "?"); return s.length > n ? s.sli
 function buildCards() {
   $("#cards").innerHTML = STAGES.map((s) => `
     <div class="card" id="card-${s.id}" style="--c:${s.c}">
-      <div class="head"><span class="icon"></span><span class="name">${s.name}</span>
+      <div class="head"><span class="icon ${s.shape}"></span><span class="name">${s.name}</span>
         ${s.jev ? '<span class="badge">ASKS JEV</span>' : ""}</div>
       <div class="sub">${s.sub}</div>
       <div class="row"><span class="label" data-f="label">—</span><span class="value" data-f="value">—</span></div>
@@ -58,6 +58,14 @@ function setCard(id, { label, value, bar, quote, active }) {
   el.classList.toggle("active", !!active);
 }
 
+// pipeline stage (from events) -> which character/card is working right now
+function activeStage() {
+  if (!S?.desk?.running) return null;
+  const st = (S.live_stages || []).filter((k) => k !== "desk").pop();
+  if (st === "jev") return Math.floor(Date.now() / 1500) % 2 ? "jevm" : "jevt";
+  return st || "desk";
+}
+
 function renderCards() {
   const st = S.stages || {}, d = S.desk;
   const running = d.running;
@@ -67,7 +75,8 @@ function renderCards() {
   const decision = st.pick?.decision;
   const sc = S.score?.by_verdict?.all || {};
   const nextIn = Math.max(0, Math.round((d.next_cycle - Date.now() / 1000) / 60));
-  const lastStage = running ? Object.keys(st).pop() : null;
+  const act = activeStage();
+  const lastStage = act === "jevm" || act === "jevt" ? "jev" : act;
 
   setCard("desk", {
     label: running ? "cycle running" : `next cycle in ${nextIn}m`,
@@ -99,12 +108,12 @@ function renderCards() {
     label: jm ? `${short(jm.ticker)} · ${jm.shape}` : "—",
     value: jm ? `crowd ${num(jm.crowd)}` : "—", bar: jm?.crowd ?? 0,
     quote: jm ? (jm.fails?.filter((f) => !TEXT_Q.includes(f)).join(", ") || "market checks passed") : null,
-    active: running && lastStage === "jev",
+    active: act === "jevm",
   });
   setCard("jevt", {
     label: jm ? short(jm.ticker) : "—",
     value: jm ? `effort ${num(jm.answers?.effort, 1)}/3` : "—", bar: (jm?.answers?.effort ?? 0) / 3,
-    quote: jm ? `copycat ${num(jm.answers?.copycat)}` : null, active: running && lastStage === "jev",
+    quote: jm ? `copycat ${num(jm.answers?.copycat)}` : null, active: act === "jevt",
   });
   setCard("pick", {
     label: decision ? `${decision.passed ?? 0} of ${decision.judged ?? 0} passed` : "—",
@@ -140,15 +149,16 @@ function tickClock() {
 // --- finalist chips --------------------------------------------------------------
 function renderChips() {
   const fs = S.finalists || [];
-  $("#chips").innerHTML = fs.length ? fs.map((f) => {
+  const sel = currentFinalist()?.addr;
+  $("#chips").innerHTML = fs.map((f) => {
     const fails = f.judged?.fails || [];
     const ok = f.judged && !fails.length;
-    return `<div class="chip ${ok ? "pass" : "reject"}" data-addr="${esc(f.addr)}">
-      <span class="dot" style="background:hsl(${hue(f.addr)} 70% 60%)">${esc(String(f.ticker || "?").slice(0, 2).toUpperCase())}</span>
-      <span>${esc(short(f.ticker, 12))}</span>
-      <span class="res" style="color:${ok ? "var(--green)" : "var(--red)"}">${ok ? "PASS" : esc(fails[0] || "–")}</span></div>`;
-  }).join("") : '<span class="muted small">no finalists in the last scan</span>';
-  document.querySelectorAll(".chip").forEach((c) => c.onclick = () => { selected = c.dataset.addr; renderAnalysis(); renderThresholds(); });
+    const ring = !f.judged ? "#7d8499" : ok ? "var(--green)" : "var(--red)";
+    return `<div class="chip ${f.addr === sel ? "sel" : ""}" data-addr="${esc(f.addr)}" style="--ring:${ring}">
+      <span class="dot" style="background:hsl(${hue(f.addr)} 70% 62%)">${esc(String(f.ticker || "?").slice(0, 2).toUpperCase())}</span>
+      <span class="tip">${esc(short(f.ticker, 16))} · <span style="color:${ring}">${ok ? "PASS" : esc(fails.join(", ") || "not judged")}</span></span></div>`;
+  }).join("");
+  document.querySelectorAll(".chip").forEach((c) => c.onclick = () => { selected = c.dataset.addr; renderChips(); renderAnalysis(); renderThresholds(); });
 }
 
 // --- ticker ------------------------------------------------------------------------
@@ -210,7 +220,9 @@ function renderShadow() {
   ctx.strokeStyle = "#262b3a"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pad, Y(0)); ctx.lineTo(W - pad, Y(0)); ctx.stroke();
   ctx.fillStyle = "#7d8499"; ctx.font = `${10 * devicePixelRatio}px monospace`;
   ctx.fillText("$0", 2, Y(0) + 3);
-  ctx.fillText(usd(y1), 2, Y(y1) + 10 * devicePixelRatio); ctx.fillText(usd(y0), 2, Y(y0));
+  const gap = 14 * devicePixelRatio;
+  if (Y(0) - Y(y1) > gap) ctx.fillText(usd(y1), 2, Y(y1) + 10 * devicePixelRatio);
+  if (Y(y0) - Y(0) > gap) ctx.fillText(usd(y0), 2, Y(y0));
   for (const [v, pts] of Object.entries(groups)) {
     if (!pts.length) continue;
     ctx.strokeStyle = VERDICT_COLORS[v]; ctx.lineWidth = 2 * devicePixelRatio; ctx.beginPath();
@@ -253,7 +265,7 @@ async function renderAnalysis() {
       <span>${esc(short(x.ticker, 11))}</span><span>${esc(fails.join(", ") || (x.judged ? "passed every check" : "not judged"))}</span>
       <span style="color:${fails.length ? "var(--red)" : "var(--green)"}">${fails.length ? "DROP" : x.judged ? "PASS" : "–"}</span></div>`;
   }).join("");
-  document.querySelectorAll(".an-list .it").forEach((el) => el.onclick = () => { selected = el.dataset.addr; renderAnalysis(); renderThresholds(); });
+  document.querySelectorAll(".an-list .it").forEach((el) => el.onclick = () => { selected = el.dataset.addr; renderChips(); renderAnalysis(); renderThresholds(); });
   if (!f) { $("#an-token").textContent = "no finalist to show yet"; $("#an-checks").innerHTML = ""; drawCandles([]); return; }
   $("#an-token").innerHTML = `<b>${esc(f.ticker)}</b> <span class="muted">${esc(f.name || "")}</span> · mcap ${money(f.mcap_usd)} · liq ${money(f.liquidity_usd)} · vol24 ${money(f.volume_h24)} · ${Math.round((f.age_minutes || 0) / 60)}h old`;
   $("#an-checks").innerHTML = softRows(f.judged?.answers).map((r) => `<div class="ck">
@@ -261,8 +273,10 @@ async function renderAnalysis() {
       <span class="${r.ok == null ? "" : r.ok ? "ok" : "bad"}">${r.ok == null ? "–" : r.ok ? "PASS" : "DROP"}</span></div>`).join("")
     || '<span class="muted">not judged yet</span>';
   if (f.pool_addr) {
-    try { drawCandles((await (await fetch(`/api/ohlcv?pool=${encodeURIComponent(f.pool_addr)}`)).json()).candles || []); }
-    catch (_) { drawCandles([]); }
+    try {
+      const cs = (await (await fetch(`/api/ohlcv?pool=${encodeURIComponent(f.pool_addr)}`)).json()).candles || [];
+      drawCandles(cs); Office.setCandles(cs);
+    } catch (_) { drawCandles([]); }
   }
 }
 function drawCandles(cs) {
@@ -317,11 +331,19 @@ function renderThresholds() {
 async function pollState() {
   try {
     S = await (await fetch("/api/state")).json();
+    const midnight = new Date().setHours(0, 0, 0, 0) / 1000;
+    const today = (S.score?.series || []).filter((r) => r.t >= midnight);
+    S._rejectsToday = today.filter((r) => r.verdict === "reject").length;
+    S._picksToday = today.filter((r) => r.verdict === "pick").length;
+    S._judgedToday = today.length;
+    S._selected = selected;
     renderHeader(); renderCards(); renderChips(); renderShadow(); renderThresholds(); renderAnalysis();
   } catch (e) { $("#mode").textContent = "OFFLINE · retrying"; }
 }
 
 buildCards();
+Office.init($("#floor"));
+setInterval(() => S && Office.update(S, { active: activeStage() }), 500);
 tickClock(); setInterval(tickClock, 1000);
 pollState(); setInterval(pollState, 10000);
 pollEvents(); setInterval(pollEvents, 3000);

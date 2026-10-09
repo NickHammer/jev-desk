@@ -20,11 +20,15 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; background: var(--frame); color: var(--text); font-family: var(--sans); }
+html, body { margin: 0; color: var(--text); font-family: var(--sans); }
+html { background-color: var(--frame);
+       background-image: linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px),
+                         linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px);
+       background-size: 22px 22px; }
 body { padding: 10px; }
 
 #frame {
-  max-width: 1280px; margin: 0 auto; background: var(--frame);
+  max-width: 1280px; margin: 0 auto;
   display: flex; flex-direction: column; gap: 10px;
 }
 
@@ -51,7 +55,19 @@ body { padding: 10px; }
 }
 .card.active { box-shadow: 0 0 0 2px var(--c), 0 0 18px -2px var(--c); transform: translateY(-1px); }
 .card .head { display: flex; align-items: center; gap: 8px; }
-.card .icon { width: 18px; height: 18px; border-radius: 50%; background: var(--c); flex: none; }
+.card .icon { width: 18px; height: 18px; background: var(--c); flex: none; position: relative; }
+.card .icon::after { content: ""; position: absolute; left: 4px; top: 6px; width: 3px; height: 3px;
+                     background: #0b0d14; box-shadow: 6px 0 0 #0b0d14; }
+.icon.circle { border-radius: 50%; }
+.icon.blob { border-radius: 40% 40% 30% 30%; }
+.icon.square { border-radius: 2px; }
+.icon.triangle { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.icon.triangle::after { top: 10px; }
+.icon.diamond { clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%); }
+.icon.spiky { clip-path: polygon(50% 0,63% 30%,98% 22%,74% 50%,98% 78%,63% 70%,50% 100%,37% 70%,2% 78%,26% 50%,2% 22%,37% 30%); }
+.icon.bean { border-radius: 8px; width: 13px; }
+.icon.bean::after { left: 2px; box-shadow: 5px 0 0 #0b0d14; }
+.icon.ghost { border-radius: 50% 50% 20% 20%; }
 .card .name { font-weight: 900; font-size: 15px; color: var(--c); letter-spacing: .5px; }
 .card .badge { margin-left: auto; font-family: var(--mono); font-size: 9px; color: var(--pink);
                border: 1px solid var(--pink); padding: 1px 4px; border-radius: 2px; }
@@ -79,18 +95,19 @@ body { padding: 10px; }
 #ticker-track { position: absolute; white-space: nowrap; top: 5px; left: 0;
                 animation: scroll 60s linear infinite; }
 @keyframes scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
-#office-body { min-height: 320px; position: relative; display: flex; flex-direction: column;
-               align-items: center; justify-content: center; gap: 18px;
-               background: repeating-linear-gradient(0deg, #0d1018 0 31px, #10131c 31px 32px); }
-.placeholder { text-align: center; font-family: var(--mono); }
-.ph-title { font-size: 22px; letter-spacing: 6px; color: #39405a; font-weight: 900; }
-#chips { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; padding: 0 12px; }
-.chip { display: flex; align-items: center; gap: 8px; background: var(--panel-2); border: 1px solid var(--line);
-        border-radius: 22px; padding: 4px 12px 4px 4px; font-family: var(--mono); font-size: 12px; }
-.chip .dot { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
-             font-weight: 900; font-size: 11px; color: #0b0d14; }
-.chip.reject { opacity: .75; }
-.chip .res { font-size: 10px; }
+#office-body { position: relative; background: #0c0f17; }
+#floor { display: block; width: 100%; image-rendering: pixelated; }
+#chips { position: absolute; right: 1.2%; top: 31%; display: flex; gap: 6px; flex-wrap: wrap;
+         justify-content: flex-end; max-width: 26%; }
+.chip { position: relative; cursor: pointer; }
+.chip .dot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+             font-family: var(--mono); font-weight: 900; font-size: 11px; color: #0b0d14;
+             border: 2px solid #0b0d14; box-shadow: 0 0 0 2px var(--ring); }
+.chip.sel .dot { box-shadow: 0 0 0 2px var(--ring), 0 0 12px var(--ring); }
+.chip .tip { display: none; position: absolute; right: 0; top: 36px; white-space: nowrap; z-index: 2;
+             background: #06080d; border: 1px solid var(--line); padding: 3px 7px; border-radius: 3px;
+             font-family: var(--mono); font-size: 10.5px; }
+.chip:hover .tip { display: block; }
 
 #shadow canvas { width: 100%; height: 180px; display: block; }
 .legend { display: flex; gap: 12px; }
