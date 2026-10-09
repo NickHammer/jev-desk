@@ -1,7 +1,7 @@
 """Plain-fact checks. Each returns the name of the check that failed, or None.
 Facts kill before judgements do: nothing here needs a model."""
 
-from thresholds import HARD, BONDING_DEXES
+from thresholds import HARD, BONDING_DEXES, SOFT, SHAPE_MIN_CROWD
 
 
 def market_kill(t: dict) -> str | None:
@@ -52,4 +52,29 @@ def chain_kill(d: dict) -> str | None:
         return "top_10"
     if d["holder_count"] is not None and d["holder_count"] < HARD["min_holders"]:
         return "holders"
+    return None
+
+
+def judge_kill(ans: dict) -> str | None:
+    """Pass three: Jev's answers against SOFT in thresholds.py. First failure wins.
+    A question that wasn't answered fails too: missing is missing, not a pass."""
+    for name, (direction, limit) in SOFT.items():
+        a = ans.get(name)
+        if a is None:
+            return f"{name}_missing"
+        v = a.get("noul", a.get("score"))
+        if v is None:
+            return f"{name}_missing"
+        if direction == "max" and v > limit:
+            return name
+        if direction == "min" and v < limit:
+            return name
+
+    shape = ans.get("shape")
+    if shape is None:
+        return "shape_missing"
+    if shape.get("choice") in ("fading", "one_buyer", "too_early"):
+        return f"shape_{shape['choice']}"
+    if (shape.get("probabilities") or {}).get("crowd", 0) < SHAPE_MIN_CROWD:
+        return "shape_weak"
     return None

@@ -48,3 +48,25 @@ BENCH_MINUTES = {
     "bonding_curve": 15, "no_pair": 10, "dossier_failed": 20,
 }
 DEFAULT_BENCH = 45
+
+# --- Phase 3: Jev ------------------------------------------------------------
+JEV_MODEL = "jev-latest"     # the response always reports the exact version; we log that
+
+# Shadow sizing. Nothing is traded; this only feeds liquidity_fits_ticket.
+SHADOW_BANK_USD = 1_000
+MAX_TICKET_SHARE = 0.06      # the most of the bank one position could ever take
+
+# Jev's answers against these limits. ("max", x): fail above x.  ("min", x): fail below x.
+SOFT = {
+    "liquidity_fits_ticket":      ("min", 0.60),
+    "momentum_already_spent":     ("max", 0.60),
+    "concentration_is_exit_risk": ("max", 0.55),
+    "dev_still_loaded":           ("max", 0.55),
+    "wash_trading":               ("max", 0.60),
+    "copycat":                    ("max", 0.70),
+    "effort":                     ("min", 1.0),   # score is 0-3: at least "Minimal"
+}
+SHAPE_MIN_CROWD = 0.55       # probabilities["crowd"], not just the winning label
+PICK_MIN_WORTH  = 0.60       # "is any of these worth trading at all?"
+PICK_MIN_CONF   = 0.55       # confidence of the best pick
+NO_SOCIAL_CUT   = 0.60       # we never read the X account itself, so size is always cut

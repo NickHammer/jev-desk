@@ -2,6 +2,37 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-08: Phase 3, Jev judges the finalists
+
+### Added
+- **`run_judge.py`**: reads the finalists from the last scan, asks Jev about each one,
+  applies the thresholds, picks at most one token, and prints a shadow "WOULD BUY" or
+  "NO TRADE". Saves everything to `runs/judged-<UTC time>.json` and `judged-latest.json`.
+  Nothing is traded.
+- **`questions.py`**: every question Jev is asked, in two sets per token plus a pick:
+  - `market` (numbers only): launch shape, liquidity fits the ticket, momentum already
+    spent, holder concentration, dev still loaded, and a new **wash trading** question.
+  - `project` (text only, the free substitute for reading X): an **effort** score from
+    the listing's name, description, website and handle, and a **copycat** check for
+    trend-riding or borrowed names.
+  - `pick`: the best survivor, plus "is any of them worth trading at all?"
+- **`judge.py`**: calls Jev directly through the SDK's synchronous client (no server,
+  desk secret or tunnel). Arithmetic such as average trade size, trades per holder and
+  ticket share of liquidity is computed here and passed in as fields. Malformed-question
+  errors (400/422) stop the run instead of retrying.
+- **`filter.judge_kill()`**: applies Jev's answers to the limits in `thresholds.py`.
+  An unanswered question fails, it never passes by default.
+- **Jev settings in `thresholds.py`**: `SOFT` limits, `SHAPE_MIN_CROWD`, pick
+  thresholds, a $1,000 shadow bank with a 6% maximum ticket, and `NO_SOCIAL_CUT`.
+- **`ARCHITECTURE.md`**: Mermaid diagrams of how the whole project works.
+
+### Changed vs. the original guide
+- Two calls per token (numbers, then text) instead of three; there is no X-reading call.
+- The authority question was dropped: the chain check already settles it as a fact.
+- Holder-growth wording was replaced, since we only have a holder count snapshot.
+- Pick options are keyed by ticker plus address, because tickers repeat.
+- `too_early` is rejected outright, like `fading` and `one_buyer`.
+
 ## 2026-10-08
 
 ### Added
