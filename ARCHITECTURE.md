@@ -77,24 +77,57 @@ flowchart LR
     srv <-- "candles, cached 5 min,<br/>1 call per 30 s max" --> gt2["GeckoTerminal"]
 ```
 
-**The floor** (`office.js`) is a pixel-art office drawn in code. Each stage has a
-character and a desk; the one whose stage is running glows and works its monitor:
+**Page layout.** The eight stage cards run down the left side; the floor sits right of
+them, directly under the title, and stretches to the cards' height. Below both, one
+row: shadow P&L, Jev analysis, `thresholds.py`. On a 1080p screen almost everything
+fits without scrolling.
 
-| Stage | Character | Where |
-|---|---|---|
-| Desk (the cycle) | white ghost with a headset | head desk |
-| Scout | blue circle | desk 1 |
-| Market | green blob | desk 2 |
-| Dossier | red square | desk 3 |
-| Jev·Market | pink triangle | desk 4 |
-| Jev·Text | teal diamond | desk 5 |
-| Pick | orange spiky | desk 6 |
-| Scorekeeper | violet bean | by the scoreboard |
+```mermaid
+flowchart TB
+    head["title · mode · Jev spend · clock"]
+    subgraph main[" "]
+        direction LR
+        cards["8 stage cards<br/>(one column)"]
+        floor["ticker<br/>the floor"]
+    end
+    subgraph lower[" "]
+        direction LR
+        pnl["shadow P&L"] --- an["Jev analysis"] --- th["thresholds.py"]
+    end
+    head --> main --> lower
+```
 
-The dashboard only reads. Each panel maps to a stage: Desk, Scout, Market, Dossier,
-Jev·Market, Jev·Text, Pick and Scorekeeper cards; the ticker shows events as they land;
-the shadow P&L chart is the scorecard as a running total ($100 per token, after cost);
-the analysis panel shows the selected finalist's candles and Jev's answers; the
+**The floor** (`office.js`) is a detailed pixel-art office drawn in code. Nothing is an
+image file. The room is 300 art-pixels tall and as wide as its panel. The six work
+desks stay centred, and the side areas stretch to fill the space. On a narrow screen
+the room keeps its minimum width and the ceiling gets higher instead.
+
+- **Look:** outlines, three-tone shading, rim light, monitor light on desks and faces,
+  a perspective floor, faint scanlines and a vignette.
+- **Fixed parts:** the wall, floor, rug and frames are drawn once into a cached
+  background and redrawn only on resize.
+- **Characters:** each body is rendered once into a small sprite. Eyes, arms and
+  glow are drawn each frame.
+- **Working:** the character whose stage is running glows, types fast and looks at
+  its screen, and its monitor brightens.
+- **Real data on the walls:** the wall screen shows candles, and the left wall shows
+  the finalist chips and the verdicts judged today. The clock and today board are
+  on the right. The scoreboard shows the last 14 tokens' 1h results.
+
+| Stage | Character | Where | Its monitor shows |
+|---|---|---|---|
+| Desk (the cycle) | white ghost with a headset | head desk (right) | — |
+| Scout | blue circle with an antenna | desk 1 | radar sweep |
+| Market | green blob with a tie | desk 2 | volume bars |
+| Dossier | red square with glasses | desk 3 | rows being checked |
+| Jev·Market | pink triangle with a halo | desk 4 | a price line |
+| Jev·Text | teal diamond with a halo | desk 5 | text being read |
+| Pick | orange spiky with a star | desk 6 | three candidates, one chosen |
+| Scorekeeper | violet bean with a clipboard | by the scoreboard | — |
+
+The dashboard only reads. Each card maps to a stage. The ticker shows events as they
+land. The shadow P&L chart is the scorecard as a running total ($100 per token, after
+cost). The analysis panel shows the selected finalist's candles and Jev's answers. The
 thresholds panel shows every number in `thresholds.py` against that token.
 
 ## 2. The scan: from ~140 launches to a handful of finalists
@@ -291,7 +324,8 @@ flowchart LR
 | 4 | Shadow scorekeeper: every judged token re-priced at 1h / 6h / 24h | done |
 | 5 | Run unattended every 15 minutes (systemd timer) | done |
 | D1 | Dashboard: event log, server, every panel on real data | done |
-| D2 | Dashboard: the look, pixel office and characters | **built, testing on the Pi** |
+| D2 | Dashboard: the look, pixel office and characters | done |
+| D2.1 | Dashboard: cards on the left, detailed pixel-art floor | **built, testing** |
 | D3 | Dashboard: the spider and event-driven animation, with replay | next |
 | D4 | Dashboard: polish, always-on service, docs | planned |
 | 6 | Review the scorecard (1–2 weeks of data); decide whether execution is worth building | planned |

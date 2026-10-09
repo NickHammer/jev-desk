@@ -2,6 +2,38 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-09: Dashboard, step 2.1 (new layout, detailed pixel art)
+
+### Changed
+- **Layout:** the 8 stage cards are one column on the left. The floor sits directly
+  under the title and stretches to the cards' height. Shadow P&L, Jev analysis and
+  `thresholds.py` share one row below, with thresholds in two columns. At 1920×1080
+  almost the whole page fits without scrolling. Smaller screens fall back to two
+  rows below the floor, and phones to one column.
+- **The floor is redrawn in a detailed pixel-art style:**
+  - Outlines, three-tone shading with a rim light, and monitor light spilling onto
+    desks and faces.
+  - A perspective floor with a rug, ceiling lamps, scanlines and a vignette.
+  - The room fills the panel's full width: the desks stay centred and the sides
+    stretch, so there are no empty bars. On narrow screens the ceiling gets higher
+    instead.
+- **Characters keep their shapes and colors**, now shaded and each with an accessory:
+  - Scout has an antenna, Market a tie and Dossier glasses.
+  - Jev·Market and Jev·Text have halos, Pick a star, the Scorekeeper a clipboard and
+    the Desk a headset.
+  - They blink, glance around and type now and then.
+  - The working character glows, types fast and watches its screen.
+- **Each desk's monitor shows its job:** radar (Scout), volume bars (Market), rows
+  being checked (Dossier), a price line (Jev·Market), text being read (Jev·Text) and
+  three candidates with one chosen (Pick).
+- **More real data on the floor:**
+  - Finalist chips sit on a wall board, scaled to the room.
+  - A "judged today" strip has one colored square per verdict.
+  - The scoreboard charts the last 14 tokens' 1h results after cost.
+  - The wall screen says how long until the next cycle.
+- The per-finalist list under the analysis chart is hidden to save height. The chips
+  on the floor show the same verdicts.
+
 ## 2026-10-09: Dashboard, step 2 (the look, the office, the characters)
 
 ### Added

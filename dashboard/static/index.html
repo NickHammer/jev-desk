@@ -21,29 +21,31 @@
     </div>
   </header>
 
-  <section id="cards" aria-label="Stages">
-    <!-- filled by app.js -->
-  </section>
+  <div id="main">
+    <section id="cards" aria-label="Stages">
+      <!-- filled by app.js -->
+    </section>
 
-  <section id="office" class="panel">
-    <div class="ticker"><div id="ticker-track"></div></div>
-    <div id="office-body">
-      <canvas id="floor" aria-label="The office: one character per stage of the pipeline"></canvas>
-      <div id="chips" aria-label="Finalists"></div>
-    </div>
-  </section>
+    <section id="office" class="panel">
+      <div class="ticker"><div id="ticker-track"></div></div>
+      <div id="office-body">
+        <canvas id="floor" aria-label="The office: one character per stage of the pipeline"></canvas>
+        <div id="chips" aria-label="Finalists"></div>
+      </div>
+    </section>
+  </div>
 
-  <section id="shadow" class="panel">
-    <div class="panel-head">
-      <span>SHADOW P&amp;L · $100 PER TOKEN · AFTER <span id="cost">3</span>% COST</span>
-      <span id="shadow-legend" class="legend"></span>
-    </div>
-    <canvas id="shadow-chart"></canvas>
-    <div id="shadow-note" class="muted small"></div>
-  </section>
+  <div id="lower">
+    <section id="shadow" class="panel">
+      <div class="panel-head">
+        <span>SHADOW P&amp;L · $100/TOKEN · AFTER <span id="cost">3</span>% COST</span>
+        <span id="shadow-legend" class="legend"></span>
+      </div>
+      <canvas id="shadow-chart"></canvas>
+      <div id="shadow-note" class="muted small"></div>
+    </section>
 
-  <section id="bottom">
-    <div id="analysis" class="panel">
+    <section id="analysis" class="panel">
       <div class="panel-head"><span>JEV · ANALYSIS</span><span id="an-count" class="pink">—</span></div>
       <div id="an-token" class="an-token">—</div>
       <div class="an-body">
@@ -51,8 +53,9 @@
         <div id="an-checks" class="checks"></div>
       </div>
       <div id="an-list" class="an-list"></div>
-    </div>
-    <div id="thresholds" class="panel">
+    </section>
+
+    <section id="thresholds" class="panel">
       <div class="panel-head"><span>thresholds.py</span><span class="pink">EVERY NUMBER THE DESK BELIEVES</span></div>
       <div id="th-body" class="code"></div>
       <div class="pills" id="pills">
@@ -62,8 +65,8 @@
         <span class="pill" data-stage="jev">judge_kill</span>
         <span class="pill" data-stage="pick">pick</span>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 
   <footer class="muted small" id="foot">read-only view of the desk on this Pi · nothing here can trade</footer>
 </div>

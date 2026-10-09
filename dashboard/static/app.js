@@ -1,4 +1,4 @@
-// Nick's Jev Trading Desk: dashboard front end (step 2: real data + the pixel office).
+// Nick's Jev Trading Desk: dashboard front end (real data + the pixel office).
 // Every token name, ticker and description comes from the internet, so all of it is
 // escaped before it touches the page.
 
@@ -342,7 +342,7 @@ async function pollState() {
 }
 
 buildCards();
-Office.init($("#floor"));
+Office.init($("#floor"), $("#chips"));
 setInterval(() => S && Office.update(S, { active: activeStage() }), 500);
 tickClock(); setInterval(tickClock, 1000);
 pollState(); setInterval(pollState, 10000);
