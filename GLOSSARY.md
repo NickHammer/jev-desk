@@ -11,6 +11,7 @@ dashboard. Grouped by topic; alphabetical within each group.
 - **Control group**: 3 random tokens per cycle that passed the free market check and were never judged. They're priced like the rest; this is the baseline.
 - **Edge**: a real, repeatable advantage. Here, Jev's passes doing clearly better than the baseline over many tokens.
 - **Gone checkpoint**: we tried at least twice and there was no price at all. The token most likely rugged or was delisted.
+- **Median**: the middle result when all are lined up. Unlike the average, a few huge winners can't drag it up, so it shows what a typical token did.
 - **Missed checkpoint**: the window closed with too few tries, for example because the Pi was off.
 - **Pending checkpoint**: not due yet.
 - **Priced checkpoint**: the price was taken on time.
@@ -20,6 +21,7 @@ dashboard. Grouped by topic; alphabetical within each group.
 - **Settings stamp**: an 8-character code for the settings that decided a token. When the settings change, so does the stamp, so before and after results are never mixed.
 - **Shadow mode**: the desk decides and records what it *would* do, but never trades or holds money.
 - **Survivorship bias**: averages look better than reality when the worst outcomes (rugs that disappear) drop out of the data.
+- **What-if**: replaying Jev's saved answers under different limits (`whatif.py`) to see which tokens would have passed and how they did, without waiting for new data.
 - **Win rate**: the share of tokens that would have made money after cost.
 - **Worst case**: the scorecard again with every gone checkpoint counted as −100%, so rugs that vanished still count.
 

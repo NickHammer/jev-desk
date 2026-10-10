@@ -2,6 +2,26 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: What-if replays and medians
+
+### Added
+- **`whatif.py`** replays Jev's saved answers for every judged token in the last 7 days
+  (from `runs/judged-*.json`) through the real `judge_fails()` under other limits. It
+  shows which tokens would have passed and how they actually did, next to "still
+  rejected" and the control group from the same days. Examples:
+  `python whatif.py wash_trading=0.8 effort=0.5`, `python whatif.py --drop wash_trading`
+  and `python whatif.py --sweep effort`.
+  - It never calls Jev, so it costs nothing, and it changes nothing.
+  - With no arguments it checks that today's limits reproduce every recorded verdict.
+
+### Changed
+- **The scorecard shows the median** next to the average for every group and check.
+  Memecoin returns are lopsided: the control group averaged +12% at 1h while only 35%
+  of its tokens made money, so the median shows what a typical token did.
+
+No verdict changes: thresholds and questions are untouched, so the settings stamp stays
+the same.
+
 ## 2026-10-10: Pacers TV plays your playlist first
 
 ### Fixed

@@ -85,11 +85,17 @@ def table(rows: list[dict], sub: str, worst: bool = False):
 
 
 def cell(values: list[float]) -> str:
+    """n, average, median and win rate. Memecoin returns are lopsided: a few huge winners
+    can pull the average far above what a typical token did, so read the median too."""
     if not values:
-        return f"{'-':>4} {'':>8} {'':>5}"
-    avg = statistics.fmean(values)
+        return f"{'-':>4} {'':>8} {'':>8} {'':>5}"
+    avg, med = statistics.fmean(values), statistics.median(values)
     win = sum(v > 0 for v in values) / len(values) * 100
-    return f"{len(values):>4} {avg:>+7.1f}% {win:>4.0f}%"
+    return f"{len(values):>4} {avg:>+7.1f}% {med:>+7.1f}% {win:>4.0f}%"
+
+
+HEADER = "".join(f"  {' ' + cp + ' ':-^28}" for cp in CHECKPOINTS)
+SUB = "".join(f"  {'n':>4} {'avg':>8} {'median':>8} {'win':>5}" for _ in CHECKPOINTS)
 
 
 def report(settings: str | None = None):
@@ -109,12 +115,11 @@ def report(settings: str | None = None):
     print(f"SCORECARD: {len(rows)} token(s) tracked since {since} "
           f"({judged} judged by Jev, {len(rows) - judged} in the control group)")
     print(f"returns are after an assumed {ROUND_TRIP_COST_PCT}% round-trip cost; "
-          f"win = share that would have made money")
+          f"win = share that would have made money; median = the middle token")
     print("control = random tokens that passed the free market check, never judged: "
           "the baseline Jev has to beat\n")
 
-    header = "".join(f"  {' ' + cp + ' ':-^19}" for cp in CHECKPOINTS)
-    sub = "".join(f"  {'n':>4} {'avg':>8} {'win':>5}" for _ in CHECKPOINTS)
+    header, sub = HEADER, SUB
     print(f"{'':<10}{header}")
     table(rows, sub)
 

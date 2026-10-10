@@ -319,8 +319,16 @@ Each checkpoint is only priced in a short window after it falls due
 (`CHECKPOINT_WINDOW`: 30 min after 1h, 2 h after 6h, 6 h after 24h). With the timer
 running every 15 minutes, checkpoints land within minutes of their mark.
 
-The scorecard warns until pass and control each have 30+ results at 24h. Before that,
-differences are noise.
+The scorecard shows the **median** next to the average. Memecoin returns are lopsided,
+so a few huge winners can pull an average far above what a typical token did. It warns
+until pass and control each have 30+ results at 24h; before that, differences are noise.
+
+**What-if** (`whatif.py`) replays Jev's saved answers (`runs/judged-*.json`, last 7
+days) through the real `judge_fails()` under other limits. It then joins them to the
+tracked prices and compares "would pass", "still rejected" and the control group from
+the same days. It never calls Jev and never changes anything; it answers "what if
+wash trading allowed 0.8?" without waiting. With no arguments it checks itself: today's
+limits should reproduce every recorded verdict.
 
 ## 5. A token's life
 
@@ -369,6 +377,7 @@ flowchart LR
         ev2["events.py<br/>event log"]
         db["db.py<br/>watchlist, bench, tracked, settings"]
         st["settings_stamp.py<br/>settings stamp"]
+        wi["whatif.py<br/>replay answers, read-only"]
         su["solana_util.py<br/>wallet vs pool test"]
     end
     tm(["systemd timer"]) --> ra["run_all.sh"]
@@ -377,6 +386,7 @@ flowchart LR
     rj --> jd & fil & db
     sc --> src & db
     rs & rj --> st
+    wi --> fil & db
     jd --> qs
     src --> su
     src & fil & db & jd --> th

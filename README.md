@@ -70,6 +70,8 @@ systemctl list-timers jev-desk.timer            # when the next cycle runs
 sudo systemctl start jev-desk.service           # run one cycle now
 .venv/bin/python score.py --no-update           # print the scorecard any time
 .venv/bin/python score.py --no-update --settings current   # only today's settings
+.venv/bin/python whatif.py wash_trading=0.8 effort=0.5      # replay Jev's answers under other limits
+.venv/bin/python whatif.py --sweep wash_trading             # try a range for one check
 sudo systemctl disable --now jev-desk.timer     # stop it
 ```
 
@@ -135,6 +137,7 @@ plain-English definitions of the terms used.
 | `ARCHITECTURE.md` | diagrams of the whole pipeline |
 | `GLOSSARY.md` | plain-English definitions of the terms used |
 | `settings_stamp.py` | the short code for the settings that decided each tracked token |
+| `whatif.py` | replays Jev's saved answers under other limits, read-only |
 | `CHANGELOG.md` | what changed and when |
 
 ## Fixes vs. the original guide
