@@ -2,6 +2,31 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: Attention signals, and 30 days of Jev's answers
+
+### Added
+- **Attention signals** (`signals.py`), recorded as a JSON column with every tracked
+  token, judged and control alike. They never decide a verdict, so the settings stamp is
+  unchanged.
+  - **Buying momentum:** the last hour's volume, buys and distinct buyers against their
+    6-hour hourly pace, and the share of the last hour's trades and wallets that were
+    buying. It comes from pool data the scan already fetches; distinct buyers and
+    sellers are newly kept from GeckoTerminal.
+  - **Holders:** the holder count, holders per hour since launch, and holder growth across
+    cycles. A new `holder_snaps` table keeps 3 days of holder counts, one per dossier.
+    Each control token gets one GeckoTerminal info call (3 per scan, about 18 s of
+    pacing), so control carries the same numbers.
+  - **Paid promotion:** DexScreener's active boosts and paid orders (profile, ads,
+    community takeover). It is free and needs no key, at about 10 calls a cycle. If
+    DexScreener can't be reached, the values are stored as unknown, never as "not
+    promoted".
+- **`python signals.py`** splits tracked tokens at each signal's median and shows how
+  the high and low halves did at 1h, 6h and 24h.
+
+### Changed
+- **Jev's saved answers are kept 30 days instead of 7** (`RUN_KEEP_DAYS`), so
+  `whatif.py` can replay the whole experiment.
+
 ## 2026-10-10: What-if replays and medians
 
 ### Added

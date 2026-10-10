@@ -95,4 +95,5 @@ CONTROL_PER_CYCLE = 3
 GONE_AFTER_TRIES = 2
 
 # --- Phase 5: running unattended ---------------------------------------------
-RUN_KEEP_DAYS = 7            # runs/judged-*.json older than this are deleted
+RUN_KEEP_DAYS = 30           # runs/judged-*.json older than this are deleted; whatif.py
+                             # can only replay what is kept, so keep the whole experiment

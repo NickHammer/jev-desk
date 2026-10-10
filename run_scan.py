@@ -18,6 +18,7 @@ load_dotenv(Path(__file__).with_name(".env"))   # before sources reads SOLANA_RP
 import db                                         # noqa: E402
 import events                                     # noqa: E402
 import settings_stamp                             # noqa: E402
+import signals                                    # noqa: E402
 import sources                                    # noqa: E402
 from collect import from_pools, add_dossier       # noqa: E402
 from filter import market_kill, chain_kill        # noqa: E402
@@ -101,8 +102,16 @@ def main():
     sample = random.sample(priced, min(CONTROL_PER_CYCLE, len(priced)))
     stamp = settings_stamp.current()
     db.remember_settings(stamp, settings_stamp.settings_json())
+    for t in sample:                 # holder counts, so control has the same signals as finalists
+        try:
+            t["holder_count"] = (sources.gt_token_info(t["addr"]).get("holders") or {}).get("count")
+            db.record_holders(t["addr"], t["holder_count"])
+        except Exception as e:
+            print(f"   holder count failed for control {t['ticker']}: {str(e)[:60]}")
+    promo = signals.promotion([t["addr"] for t in sample])
     n = db.track([{"addr": t["addr"], "ticker": t["ticker"], "price0": t["price_usd"],
-                   "verdict": "control", "fails": []} for t in sample],
+                   "verdict": "control", "fails": [],
+                   "signals": signals.build(t, promo.get(t["addr"]))} for t in sample],
                  run=events.CYCLE, stamp=stamp)
     print(f"control group: {n} random market survivor(s) newly tracked as the baseline")
 
@@ -128,6 +137,7 @@ def main():
             print(f"   holder lookup failed for {t['ticker']}: {e} (kept as unknown)")
             conc = None
         d = add_dossier(t, info, conc, auth)
+        db.record_holders(d["addr"], d.get("holder_count"))     # for holder growth (signals.py)
         k = chain_kill(d)
         top10, src = ((d["top_10_pct"], "rpc") if d["top_10_pct"] is not None
                       else (d["gt_top_10_pct"], "gt"))

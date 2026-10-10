@@ -30,11 +30,13 @@ flowchart TD
     subgraph ext["Outside services (read-only)"]
         gt["GeckoTerminal<br/>free, 10 calls/min"]
         rpc["Solana RPC via Helius<br/>free tier"]
+        dsx["DexScreener<br/>free: boosts, paid orders"]
         jev["TypeSafe Jev<br/>~$0.042 per million tokens"]
     end
 
     scan <--> gt
     scan <--> rpc
+    scan & judgeRun <--> dsx
     judgeRun <--> jev
     scoreRun <--> gt
 ```
@@ -323,6 +325,22 @@ The scorecard shows the **median** next to the average. Memecoin returns are lop
 so a few huge winners can pull an average far above what a typical token did. It warns
 until pass and control each have 30+ results at 24h; before that, differences are noise.
 
+**Attention signals** (`signals.py`) are recorded with every tracked token, judged and
+control alike, as one JSON column. They never decide a verdict, and the settings stamp
+ignores them:
+- **Buying momentum:** the last hour's volume, buys and distinct buyers against their
+  6-hour hourly pace, plus the buy and buyer share of the last hour. This comes from pool
+  data the scan already fetches.
+- **Holders:** the holder count, holders per hour since launch, and holder growth across
+  cycles from the `holder_snaps` table. Every dossier records a snapshot. Control tokens
+  get one GeckoTerminal info call each so they carry the same numbers.
+- **Paid promotion:** DexScreener's active boosts and paid orders (profile, ads,
+  community takeover). If DexScreener can't be reached these are recorded as unknown,
+  never as "not promoted".
+
+`python signals.py` splits tracked tokens at each signal's median and compares the
+halves at 1h, 6h and 24h.
+
 **What-if** (`whatif.py`) replays Jev's saved answers (`runs/judged-*.json`, last 7
 days) through the real `judge_fails()` under other limits. It then joins them to the
 tracked prices and compares "would pass", "still rejected" and the control group from
@@ -378,6 +396,7 @@ flowchart LR
         db["db.py<br/>watchlist, bench, tracked, settings"]
         st["settings_stamp.py<br/>settings stamp"]
         wi["whatif.py<br/>replay answers, read-only"]
+        sg["signals.py<br/>attention signals"]
         su["solana_util.py<br/>wallet vs pool test"]
     end
     tm(["systemd timer"]) --> ra["run_all.sh"]
@@ -387,6 +406,8 @@ flowchart LR
     sc --> src & db
     rs & rj --> st
     wi --> fil & db
+    rs & rj --> sg
+    sg --> src & db
     jd --> qs
     src --> su
     src & fil & db & jd --> th
@@ -399,9 +420,9 @@ flowchart LR
 | Place | What | Kept in git? |
 |---|---|---|
 | `.env` | Jev key, Helius RPC URL, `RPC_PER_MINUTE` | **never** |
-| `desk.db` | watchlist, bench, tracked outcomes and settings stamps (SQLite) | no |
+| `desk.db` | watchlist, bench, tracked outcomes with attention signals, settings stamps, holder snapshots (3 days) (SQLite) | no |
 | `runs/latest.json` | finalists from the last scan | no |
-| `runs/judged-*.json` | every Jev answer, model id, and shadow pick; kept 7 days | no |
+| `runs/judged-*.json` | every Jev answer, model id, and shadow pick; kept 30 days (`whatif.py` replays them) | no |
 | `runs/events.jsonl` | the event log the dashboard reads; kept 48 hours | no |
 | systemd journal | each cycle's output (`journalctl -u jev-desk`) | no |
 | `/etc/systemd/system/jev-desk.*`, `jev-dashboard.service` | the installed timer and dashboard service, from `deploy/` | no (templates are) |

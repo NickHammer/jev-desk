@@ -22,10 +22,14 @@ CREATE TABLE IF NOT EXISTS tracked(
   p_1h REAL, min_1h REAL, p_6h REAL, min_6h REAL, p_24h REAL, min_24h REAL);
 CREATE TABLE IF NOT EXISTS settings(
   stamp TEXT PRIMARY KEY, first_seen REAL, settings TEXT);
+CREATE TABLE IF NOT EXISTS holder_snaps(
+  addr TEXT, t REAL, holders INTEGER);
+CREATE INDEX IF NOT EXISTS holder_snaps_addr ON holder_snaps(addr, t);
 """)
 # columns added after the first release; existing databases get them on first use
 _have = {c[1] for c in DB.execute("PRAGMA table_info(tracked)")}
-for _col, _type in [("config", "TEXT"), *((f"tries_{cp}", "INTEGER DEFAULT 0") for cp in CHECKPOINTS)]:
+for _col, _type in [("config", "TEXT"), ("signals", "TEXT"),
+                    *((f"tries_{cp}", "INTEGER DEFAULT 0") for cp in CHECKPOINTS)]:
     if _col not in _have:
         DB.execute(f"ALTER TABLE tracked ADD COLUMN {_col} {_type}")
 DB.commit()
@@ -118,10 +122,11 @@ def track(rows: list[dict], run: str, stamp: str | None = None) -> int:
             (r["addr"], now - TRACK_DEDUP_HOURS * 3600))}
         if recent and not (r["verdict"] == "pick" and "pick" not in recent):
             continue
-        DB.execute("INSERT INTO tracked(addr, ticker, run, judged_at, verdict, fails, price0, config)"
-                   " VALUES (?,?,?,?,?,?,?,?)",
+        DB.execute("INSERT INTO tracked(addr, ticker, run, judged_at, verdict, fails, price0,"
+                   " config, signals) VALUES (?,?,?,?,?,?,?,?,?)",
                    (r["addr"], r["ticker"], run, now, r["verdict"],
-                    json.dumps(r.get("fails") or []), r["price0"], stamp))
+                    json.dumps(r.get("fails") or []), r["price0"], stamp,
+                    json.dumps(r["signals"]) if r.get("signals") is not None else None))
         added += 1
     DB.commit()
     return added
@@ -154,6 +159,22 @@ def checkpoint_state(row: dict, name: str) -> str:
     return "gone" if (row.get(f"tries_{name}") or 0) >= GONE_AFTER_TRIES else "missed"
 
 
+def record_holders(addr: str, holders: int | None):
+    """One holder-count snapshot, so holder growth can be measured across cycles.
+    Snapshots older than 3 days are pruned."""
+    if holders is None:
+        return
+    now = time.time()
+    DB.execute("INSERT INTO holder_snaps VALUES (?,?,?)", (addr, now, int(holders)))
+    DB.execute("DELETE FROM holder_snaps WHERE t < ?", (now - 3 * 86400,))
+    DB.commit()
+
+
+def holder_history(addr: str, since_hours: float = 6) -> list[tuple[float, int]]:
+    return list(DB.execute("SELECT t, holders FROM holder_snaps WHERE addr=? AND t>? ORDER BY t",
+                           (addr, time.time() - since_hours * 3600)))
+
+
 def no_price(rid: int, checkpoint: str):
     """A checkpoint was due but GeckoTerminal had no price for the token."""
     DB.execute(f"UPDATE tracked SET tries_{checkpoint} = COALESCE(tries_{checkpoint}, 0) + 1 "
@@ -172,4 +193,5 @@ def tracked_rows() -> list[dict]:
     rows = [dict(zip(cols, r)) for r in DB.execute("SELECT * FROM tracked")]
     for r in rows:
         r["fails"] = json.loads(r["fails"] or "[]")
+        r["signals"] = json.loads(r.get("signals") or "null")
     return rows

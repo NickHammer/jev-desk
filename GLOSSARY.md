@@ -34,6 +34,7 @@ dashboard. Grouped by topic; alphabetical within each group.
 - **Freeze authority**: a permission that lets the token creator freeze anyone's tokens. Should be renounced ("no").
 - **Graduated**: a token that left its bonding curve and now trades in a normal pool.
 - **Holders**: how many wallets own the token.
+- **Holder growth**: new holders per hour, measured from earlier snapshots of the same token.
 - **Jupiter**: the Solana service that finds the best price across DEXes. Would be how trades are made, if this ever went live.
 - **Liquidity**: the money sitting in a token's trading pool. More liquidity means you can buy and sell without moving the price much.
 - **Market cap (mcap)**: price × number of tokens. What the whole token is "worth" on paper.
@@ -54,7 +55,11 @@ dashboard. Grouped by topic; alphabetical within each group.
 
 ## How the desk works
 
+- **Acceleration (vol_accel, buy_accel, buyers_accel)**: the last hour compared with the 6-hour hourly pace. Above 1 means activity is speeding up; below 1, slowing down.
+- **Attention signals**: free numbers about interest in a token (buying momentum, holder growth, paid promotion), recorded with every tracked token but never used to decide. `signals.py` tests whether they predict anything.
 - **Bench**: a timeout. A rejected token sits out for a while (minutes to days, depending on why) before it can be checked again.
+- **Boost / paid order**: money a token's team paid DexScreener to promote it: boosts, a profile, ads. A "someone is spending to promote this" flag.
+- **Buyer share**: of the distinct wallets that traded in the last hour, the share that bought. Above 0.5 means more wallets buying than selling.
 - **Chain check (Dossier)**: free facts read straight from Solana: authorities, top wallets, holder count.
 - **Cycle**: one full run of scan → judge → score. Runs every 15 minutes.
 - **Effort score**: Jev's 0–3 rating of how much real work went into a token's name, description, website and socials.

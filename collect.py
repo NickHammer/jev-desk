@@ -59,6 +59,9 @@ def from_pools(addr: str, symbol: str, pools: list[dict],
         "volume_h1": _num(vol.get("h1")),
         "buys_h1": tx("h1", "buys"), "sells_h1": tx("h1", "sells"),
         "buys_h6": tx("h6", "buys"), "sells_h6": tx("h6", "sells"),
+        # distinct wallets, not trades: recorded as attention signals (signals.py)
+        "buyers_h1": tx("h1", "buyers"), "sellers_h1": tx("h1", "sellers"),
+        "buyers_h6": tx("h6", "buyers"), "sellers_h6": tx("h6", "sellers"),
         "trades_h24": (buys_h24 or 0) + (sells_h24 or 0)
                       if buys_h24 is not None or sells_h24 is not None else None,
         "change": {w: _num(chg.get(w)) for w in ("m5", "h1", "h6", "h24")},

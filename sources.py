@@ -109,6 +109,40 @@ def token_prices(addrs: list[str]) -> dict[str, float | None]:
     return out
 
 
+# --- DexScreener: has anyone paid to promote this token? (attention signals) -------
+# Free, no key: 60 calls/min for orders, 300/min for token pairs. Recorded only; it
+# never decides anything.
+DS = "https://api.dexscreener.com"
+ds_limit = Limiter(50)
+
+
+def _ds(path: str):
+    ds_limit.wait()
+    r = requests.get(f"{DS}{path}", headers=HEADERS, timeout=15)
+    r.raise_for_status()
+    return r.json()
+
+
+def ds_active_boosts(addrs: list[str]) -> dict[str, int]:
+    """Active paid boosts per token (the most on any of its pairs), 30 tokens per call."""
+    out: dict[str, int] = {a: 0 for a in addrs}
+    for i in range(0, len(addrs), 30):
+        pairs = _ds(f"/tokens/v1/solana/{','.join(addrs[i:i + 30])}") or []
+        for p in pairs if isinstance(pairs, list) else []:
+            a = ((p.get("baseToken") or {}).get("address"))
+            if a in out:
+                out[a] = max(out[a], int(((p.get("boosts") or {}).get("active")) or 0))
+    return out
+
+
+def ds_paid_orders(addr: str) -> list[str]:
+    """Paid DexScreener orders for a token, as "type:status" (types: tokenProfile,
+    communityTakeover, tokenAd, trendingBarAd; status e.g. approved, processing)."""
+    orders = _ds(f"/orders/v1/solana/{addr}") or []
+    return sorted({f"{o.get('type')}:{o.get('status')}" for o in orders
+                   if isinstance(o, dict) and o.get("type")})
+
+
 # --- Dossier: GeckoTerminal token info + Solana RPC holder concentration -----
 
 def gt_token_info(addr: str) -> dict:
