@@ -96,9 +96,16 @@ Changes to the page itself (`dashboard/static/`) only need a browser refresh
 
 **📺 Pacers TV:** the button in the top bar, or the remote on the floor's couch, turns
 on the TV in the break corner. It plays the latest Pacers highlights from YouTube in a
-loop with YouTube's own player; press Esc or click again to turn it off. If it ever
-shows the wrong channel, the channel IDs are in `HIGHLIGHT_SOURCES` in
-`dashboard/server.py`.
+loop with YouTube's own player; press Esc or click again to turn it off.
+
+It first tries the Pacers and NBA channel feeds (`HIGHLIGHT_SOURCES` in
+`dashboard/server.py`). If those give nothing, it plays a playlist you choose. Add one
+line to `.env`, the playlist's link or just its `PL...` id, then restart the dashboard:
+
+```bash
+printf '\nTV_PLAYLIST=https://www.youtube.com/playlist?list=PL...\n' >> .env
+sudo systemctl restart jev-dashboard
+```
 
 See `ARCHITECTURE.md` for diagrams of how it all fits together, and `GLOSSARY.md` for
 plain-English definitions of the terms used.

@@ -2,6 +2,17 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: Pacers TV, playlist backup
+
+### Added
+- **`TV_PLAYLIST` in `.env`**: a YouTube playlist link, or its `PL...` id, for the TV
+  to play when the channel feeds give no videos. On the Pi, YouTube's feeds returned
+  404 for every request, so this is now the dependable source. Only this one value is
+  read from `.env`, it is checked to be a valid playlist id, and nothing else from
+  `.env` reaches the page.
+- With neither feeds nor a playlist, the TV shows static and its caption reads
+  "NO SIGNAL · SEE README".
+
 ## 2026-10-10: Pacers TV on the floor
 
 ### Added

@@ -350,18 +350,17 @@ Office.init($("#floor"), $("#chips"), $("#tv"));
 
 // The break-corner TV: the 📺 button (or the remote on the floor) turns it on and off.
 // Videos are only fetched while it is on, at most every 30 minutes by the server.
-let tvVideos = null, tvFetchedAt = 0;
+let tvFeed = null, tvFetchedAt = 0;
 async function toggleTv() {
   const on = !Office.tvOn();
   $("#tv-btn").setAttribute("aria-pressed", String(on));
   if (!on) { Office.tv(false); return; }
-  if (!tvVideos || Date.now() - tvFetchedAt > 30 * 60 * 1000) {
+  if (!tvFeed || Date.now() - tvFetchedAt > 30 * 60 * 1000) {
     try {
-      const r = await (await fetch("/api/highlights")).json();
-      tvVideos = r.videos || []; tvFetchedAt = Date.now();
-    } catch (_) { tvVideos = tvVideos || []; }
+      tvFeed = await (await fetch("/api/highlights")).json(); tvFetchedAt = Date.now();
+    } catch (_) { tvFeed = tvFeed || { videos: [] }; }
   }
-  if ($("#tv-btn").getAttribute("aria-pressed") === "true") Office.tv(true, tvVideos);
+  if ($("#tv-btn").getAttribute("aria-pressed") === "true") Office.tv(true, tvFeed);
 }
 $("#tv-btn").onclick = toggleTv;
 addEventListener("keydown", (e) => { if (e.key === "Escape" && Office.tvOn()) toggleTv(); });

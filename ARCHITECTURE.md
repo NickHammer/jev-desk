@@ -171,7 +171,9 @@ the TV's screen. Nothing is downloaded or stored.
 - **Where the list comes from:** the server reads the public upload feeds of the Pacers
   and NBA channels (no API key). It keeps titles with "highlight", plus "Pacers" for the
   NBA channel, and caches the list for 30 minutes. It only fetches while someone has
-  the TV on.
+  the TV on. If the feeds give nothing, it plays the playlist set as `TV_PLAYLIST` in
+  `.env` instead. That is the only value the dashboard reads from `.env`, and it is
+  never sent to the page except as the playlist id.
 - **Small screens:** YouTube's player needs at least 200 px of height. Where the TV is
   smaller than that, the player pops out slightly larger over the floor, with a pink
   border.

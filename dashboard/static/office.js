@@ -1045,7 +1045,7 @@ const Office = (() => {
     } else if (!tv.on && age < 0.35) {                                      // switching off: shrink to a dot
       const p = age / 0.35, lw = Math.max(1, Math.round(w * (1 - p))), lh = Math.max(1, Math.round(3 * (1 - p)));
       R(x + (w - lw) / 2, y + h / 2 - lh / 2, lw, lh, "#f4f6ff");
-    } else if (tv.on && !tv.videos.length) {                                // on, nothing to show: static
+    } else if (tv.on && !tv.videos.length && !tv.playlist) {                // on, nothing to show: static
       for (let i = 0; i < 260; i++) {
         const sx = x + Math.floor(seed(i + Math.floor(t * 20) * 7) * w), sy = y + Math.floor(seed(i * 3 + Math.floor(t * 20)) * h);
         R(sx, sy, 2, 1, seed(i * 11) > 0.5 ? "#8b93a8" : "#3a4058");
@@ -1069,7 +1069,7 @@ const Office = (() => {
   function placeTv() {                                // keep the YouTube player on the TV's screen
     if (!tvEl) return;
     const v = P?.tv;
-    if (!v || !tv.on || !tv.videos.length || now - tv.since < 0.45) { tvEl.style.display = "none"; return; }
+    if (!v || !tv.on || !(tv.videos.length || tv.playlist) || now - tv.since < 0.45) { tvEl.style.display = "none"; return; }
     const k = scale / devicePixelRatio, box = cv.parentElement.getBoundingClientRect();
     let w = v.w * k, h = v.h * k, left = v.x * k, top = (v.y + TOP) * k, big = false;
     if (h < 200) {                                    // YouTube needs at least 200 px: pop out a bit larger
@@ -1081,19 +1081,27 @@ const Office = (() => {
     tvEl.classList.toggle("big", big);
   }
 
-  function tvEmbedUrl(ids) {
+  function tvEmbedUrl(ids, playlist) {
+    const base = { autoplay: "1", playsinline: "1", rel: "0", loop: "1", origin: location.origin };
     const ok = ids.filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id));
-    const q = new URLSearchParams({ autoplay: "1", playsinline: "1", rel: "0", loop: "1",
-                                    playlist: ok.join(","), origin: location.origin });
-    return ok.length ? `https://www.youtube-nocookie.com/embed/${ok[0]}?${q}` : null;
+    if (ok.length) {
+      const q = new URLSearchParams({ ...base, playlist: ok.join(",") });
+      return `https://www.youtube-nocookie.com/embed/${ok[0]}?${q}`;
+    }
+    if (playlist && /^[A-Za-z0-9_-]{10,64}$/.test(playlist)) {      // the backup: a whole playlist
+      const q = new URLSearchParams({ ...base, list: playlist, listType: "playlist" });
+      return `https://www.youtube-nocookie.com/embed/videoseries?${q}`;
+    }
+    return null;
   }
 
-  function setTv(on, videos) {
+  function setTv(on, feed) {
     tv.on = !!on; tv.since = now;
-    tv.videos = on ? (videos || []) : [];
+    tv.videos = on ? (feed?.videos || []) : [];
+    tv.playlist = on ? (feed?.playlist || null) : null;
     if (!tvEl) return;
     tvEl.innerHTML = "";
-    const src = on && tvEmbedUrl(tv.videos.map((v) => v.id));
+    const src = on && tvEmbedUrl(tv.videos.map((v) => v.id), tv.playlist);
     if (src) {
       const f = document.createElement("iframe");
       Object.assign(f, { src, title: "Pacers highlights", allowFullscreen: true,
@@ -1200,7 +1208,8 @@ const Office = (() => {
     if (S) label(String(S._rejectsToday || 0), b.x, b.y - 13.5, C.red, 6.5);
     if (P.tv) {                                       // the TV's caption, on its cabinet
       const v = P.tv, n = tv.videos.length;
-      label(tv.on ? (n ? `PACERS HIGHLIGHTS · ${n} VIDEO${n === 1 ? "" : "S"}` : "NO HIGHLIGHTS RIGHT NOW")
+      label(tv.on ? (n ? `PACERS HIGHLIGHTS · ${n} VIDEO${n === 1 ? "" : "S"}`
+                       : tv.playlist ? "PACERS HIGHLIGHTS · PLAYLIST" : "NO SIGNAL · SEE README")
                   : (tv.hover ? "CLICK TO TURN ON" : "TV · CLICK THE REMOTE"),
             v.x + v.w / 2, 257.5, tv.on ? C.pink : "#6b7290", 4);
     }

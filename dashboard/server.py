@@ -32,6 +32,7 @@ from urllib.parse import parse_qs, urlparse
 from xml.etree import ElementTree
 
 import requests
+from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -235,6 +236,17 @@ HIGHLIGHT_SOURCES = [
     {"name": "NBA", "channel": "UCWJ2lWNubArHWmf3FIHbfcQ", "must": ["pacers", "highlight"]},
 ]
 HIGHLIGHTS_CACHE_SECONDS = 1800
+# Backup when the feeds give nothing: a YouTube playlist, set in .env as
+#     TV_PLAYLIST=https://www.youtube.com/playlist?list=PL...   (the link, or just the PL... id)
+# Only this one value is read from .env; nothing from .env is ever sent to the page.
+PLAYLIST_ID = re.compile(r"^[A-Za-z0-9_-]{10,64}$")
+
+
+def tv_playlist() -> str | None:
+    raw = (dotenv_values(ROOT / ".env").get("TV_PLAYLIST") or "").strip()
+    if "list=" in raw:
+        raw = parse_qs(urlparse(raw).query).get("list", [""])[0]
+    return raw if PLAYLIST_ID.match(raw) else None
 YT_FEED = "https://www.youtube.com/feeds/videos.xml?channel_id={}"
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 NS = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015"}
@@ -275,9 +287,10 @@ def highlights():
         for v in sorted(videos, key=lambda v: v["published"], reverse=True):
             if v["id"] not in seen:
                 seen.add(v["id"]); unique.append(v)
-        data = {"videos": unique[:20], "sources": sources, "errors": errors, "fetched_at": time.time()}
+        data = {"videos": unique[:20], "sources": sources, "errors": errors, "fetched_at": time.time(),
+                "playlist": tv_playlist()}
         if not unique and _hl_cache["data"]:          # keep the last good list if a fetch fails
-            data = {**_hl_cache["data"], "errors": errors}
+            data = {**_hl_cache["data"], "errors": errors, "playlist": tv_playlist()}
         _hl_cache.update(at=time.time(), data=data)
         return data
 
