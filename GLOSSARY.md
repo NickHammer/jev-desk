@@ -8,16 +8,20 @@ dashboard. Grouped by topic; alphabetical within each group.
 - **After cost**: a return with the assumed 3% trading cost already taken off. A token that rose 2% shows as −1%.
 - **Baseline (comparison group)**: what you'd get with no judgement at all, e.g. buying every token that passed the free code checks. Jev only adds value if its passes beat the baseline.
 - **Checkpoint**: a moment we look up a judged token's price again: 1 hour, 6 hours and 24 hours after it was judged.
+- **Control group**: 3 random tokens per cycle that passed the free market check and were never judged. They're priced like the rest; this is the baseline.
 - **Edge**: a real, repeatable advantage. Here, Jev's passes doing clearly better than the baseline over many tokens.
-- **Missed checkpoint**: no price could be taken within the allowed window. Often a token that collapsed or vanished.
+- **Gone checkpoint**: we tried at least twice and there was no price at all. The token most likely rugged or was delisted.
+- **Missed checkpoint**: the window closed with too few tries, for example because the Pi was off.
 - **Pending checkpoint**: not due yet.
 - **Priced checkpoint**: the price was taken on time.
 - **Round-trip cost**: what buying and then selling would cost in fees and slippage. We assume 3%.
 - **Sample size (n)**: how many results a number is based on. Under ~30, a difference is likely luck.
-- **Scorecard**: the table `score.py` prints: average return and win rate per verdict at each checkpoint.
+- **Scorecard**: the table `score.py` prints: average return and win rate per group at each checkpoint.
+- **Settings stamp**: an 8-character code for the settings that decided a token. When the settings change, so does the stamp, so before and after results are never mixed.
 - **Shadow mode**: the desk decides and records what it *would* do, but never trades or holds money.
 - **Survivorship bias**: averages look better than reality when the worst outcomes (rugs that disappear) drop out of the data.
 - **Win rate**: the share of tokens that would have made money after cost.
+- **Worst case**: the scorecard again with every gone checkpoint counted as −100%, so rugs that vanished still count.
 
 ## Memecoins and Solana
 

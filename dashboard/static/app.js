@@ -15,7 +15,7 @@ const STAGES = [
 const MARKET_Q = ["liquidity_fits_ticket", "momentum_already_spent", "concentration_is_exit_risk",
                   "dev_still_loaded", "wash_trading"];
 const TEXT_Q = ["effort", "copycat"];
-const VERDICT_COLORS = { pick: "#ffa62b", pass: "#3ddc84", reject: "#ff5a6e" };
+const VERDICT_COLORS = { pick: "#ffa62b", pass: "#3ddc84", reject: "#ff5a6e", control: "#9aa1b5" };
 
 let S = null;              // last /api/state
 let selected = null;       // addr shown in the analysis panel
@@ -126,7 +126,7 @@ function renderCards() {
   });
   const h1 = sc["1h"] || {};
   setCard("score", {
-    label: `${S.score?.counts?.tracked ?? 0} tracked`,
+    label: `${S.score?.counts?.judged ?? 0} judged · ${S.score?.counts?.control ?? 0} control`,
     value: h1.n ? `1h ${signed(h1.avg)}` : "waiting",
     bar: (h1.n || 0) / 30,
     quote: h1.n ? `${h1.n} priced at 1h, ${h1.win}% would have won` : "first prices arrive 1h after judging",
@@ -211,7 +211,7 @@ function renderShadow() {
   $("#shadow-legend").innerHTML = Object.entries(VERDICT_COLORS).map(([v, c]) =>
     `<span><i style="background:${c}"></i>${v} ${groups[v].length ? usd(groups[v].at(-1).y) : "–"}</span>`).join("");
   $("#shadow-note").textContent = rows.length
-    ? `${rows.length} tokens priced so far · each line is the running total if $100 had gone into every token in that group, at its latest checkpoint · shadow only, no real money`
+    ? `${rows.length} tokens priced so far · each line is the running total if $100 had gone into every token in that group, at its latest checkpoint · control = random market survivors, never judged · shadow only, no real money`
     : "no prices yet: the first 1h checkpoints land an hour after a token is judged";
   if (!rows.length) return;
   const all = Object.values(groups).flat();
@@ -336,7 +336,7 @@ async function pollState() {
   try {
     S = await (await fetch("/api/state")).json();
     const midnight = new Date().setHours(0, 0, 0, 0) / 1000;
-    const today = (S.score?.series || []).filter((r) => r.t >= midnight);
+    const today = (S.score?.series || []).filter((r) => r.t >= midnight && r.verdict !== "control");
     S._rejectsToday = today.filter((r) => r.verdict === "reject").length;
     S._picksToday = today.filter((r) => r.verdict === "pick").length;
     S._judgedToday = today.length;

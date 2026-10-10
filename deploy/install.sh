@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Installs the 15-minute timer. Run it as your normal user (it asks for sudo itself):
+# Installs the 15-minute timer and the always-on dashboard. Run it as your normal user
+# (it asks for sudo itself). Safe to run again after pulling changes to deploy/:
 #     bash deploy/install.sh
 set -euo pipefail
 if [ "$(id -u)" = "0" ]; then
@@ -13,16 +14,29 @@ USER_NAME="$(id -un)"
 chmod +x "$DIR/run_all.sh"
 
 echo "Installing for user '$USER_NAME' with the project in $DIR"
-for unit in jev-desk.service jev-desk.timer; do
+for unit in jev-desk.service jev-desk.timer jev-dashboard.service; do
   sed -e "s|__USER__|$USER_NAME|g" -e "s|__DIR__|$DIR|g" "$DIR/deploy/$unit" \
     | sudo tee "/etc/systemd/system/$unit" > /dev/null
 done
 sudo systemctl daemon-reload
 sudo systemctl enable --now jev-desk.timer
+# a dashboard started by hand would hold port 8080; the service replaces it
+if pgrep -u "$USER_NAME" -f "dashboard/server.py" > /dev/null && \
+   ! systemctl is-active --quiet jev-dashboard.service; then
+  echo "Stopping the dashboard you started by hand; the service takes over."
+  pkill -u "$USER_NAME" -f "dashboard/server.py" || true
+  sleep 1
+fi
+sudo systemctl enable jev-dashboard.service
+sudo systemctl restart jev-dashboard.service
 
 echo
 systemctl list-timers jev-desk.timer --no-pager
 echo
+systemctl status jev-dashboard.service --no-pager --lines=0 || true
+echo
 echo "Installed. Watch it live:   journalctl -u jev-desk -f"
 echo "Run one cycle right now:    sudo systemctl start jev-desk.service"
 echo "Stop it for good:           sudo systemctl disable --now jev-desk.timer"
+echo "Dashboard:                  http://$(hostname).local:8080  (starts on boot)"
+echo "Dashboard logs / restart:   journalctl -u jev-dashboard -f  /  sudo systemctl restart jev-dashboard"

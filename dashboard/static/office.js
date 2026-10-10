@@ -324,7 +324,7 @@ const Office = (() => {
   function verdictBoard() {                        // one square per token judged today
     const b = P.verdicts; if (b.w < 30) return;
     const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
-    const today = (S?.score?.series || []).filter((r) => r.t * 1000 >= midnight.getTime());
+    const today = (S?.score?.series || []).filter((r) => r.t * 1000 >= midnight.getTime() && r.verdict !== "control");
     const cols = { pick: C.orange, pass: C.green, reject: C.red };
     const n = Math.floor((b.w - 60) / 5);
     for (let i = 0; i < n; i++) {
@@ -551,7 +551,7 @@ const Office = (() => {
     R(x - 33, y - 1, 66, 33, C.outline); R(x - 32, y, 64, 31, C.bezel); R(x - 32, y, 64, 1, C.bezelHi);
     R(x - 29, y + 3, 58, 25, C.screen);
     // the last 14 tracked tokens' 1h result, after cost
-    const rows = (S?.score?.series || []).filter((r) => r.net?.["1h"] != null).slice(-14);
+    const rows = (S?.score?.series || []).filter((r) => r.verdict !== "control" && r.net?.["1h"] != null).slice(-14);
     const max = Math.max(5, ...rows.map((r) => Math.abs(r.net["1h"])));
     R(x - 27, y + 15, 54, 1, "#1d2232");
     rows.forEach((r, i) => {
@@ -774,7 +774,7 @@ const Office = (() => {
       }
       case "score.start": say("score", `pricing ${e.due}`, hold); break;
       case "score.priced":
-        say("score", `${tick(e.ticker)} ${e.checkpoint} ${signed(e.net)}`, hold);
+        say("score", `${tick(e.ticker)} ${e.checkpoint} ${signed(e.net)}${e.verdict === "control" ? " · control" : ""}`, hold);
         if (!walkers.score) walk("score", { x: P.scoreboard.x - 40, by: P.score.y }, hold);
         break;
       case "desk.cycle_end":

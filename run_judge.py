@@ -20,6 +20,7 @@ load_dotenv(Path(__file__).with_name(".env"))
 import judge                                                    # noqa: E402
 import db                                                       # noqa: E402
 import events                                                   # noqa: E402
+import settings_stamp                                           # noqa: E402
 from filter import judge_fails                                  # noqa: E402
 from thresholds import (PICK_MIN_WORTH, PICK_MIN_CONF,          # noqa: E402
                         NO_SOCIAL_CUT, RUN_KEEP_DAYS)
@@ -159,10 +160,12 @@ def main():
 
     # Phase 4: remember every judged token's price so score.py can check it later
     picked = pick["row"]["addr"] if pick else None
+    settings = settings_stamp.current()
+    db.remember_settings(settings, settings_stamp.settings_json())
     added = db.track(
         [{"addr": r["addr"], "ticker": r["ticker"], "price0": r["price_usd"],
           "verdict": "pick" if r["addr"] == picked else ("pass" if not r["kill"] else "reject"),
-          "fails": r["fails"]} for r in judged], run=stamp)
+          "fails": r["fails"]} for r in judged], run=stamp, stamp=settings)
     print(f"tracking {added} new token(s) for scoring (run `python score.py`)")
 
     # Rejected tokens sit out so the next scans' dossier slots go to other tokens

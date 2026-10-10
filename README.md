@@ -42,10 +42,17 @@ Each run costs a fraction of a cent.
 python run_scan.py && python run_judge.py && python score.py
 ```
 
-Every judged token's price is saved; `score.py` re-prices them 1h, 6h and 24h later
-and prints a scorecard: how picks, passes and rejects actually did after a 3% trading
-cost, and how tokens rejected by each check did. Each checkpoint is only priced in a
-short window after it falls due (30 min / 2 h / 6 h); outside it, it counts as missed.
+Every judged token's price is saved, and each scan also tracks 3 random market
+survivors as a **control group**, never judged: the baseline Jev has to beat. `score.py`
+re-prices them all 1h, 6h and 24h later and prints a scorecard. It shows how picks,
+passes, rejects and the control group did after a 3% trading cost, and how tokens
+rejected by each check did. Each checkpoint is only priced in a short window after it
+falls due (30 min / 2 h / 6 h). A token that never gets a price is counted as "gone"
+(likely rugged), and a worst-case table counts those as −100%.
+
+Every tracked token carries a **settings stamp**, a short code for the settings that
+decided it. After you change `thresholds.py`, `questions.py`, `judge.py` or `filter.py`,
+`python score.py --settings current` shows only results under the new settings.
 
 ## Run it unattended (Phase 5)
 
@@ -62,6 +69,7 @@ journalctl -u jev-desk --since today            # today's cycles
 systemctl list-timers jev-desk.timer            # when the next cycle runs
 sudo systemctl start jev-desk.service           # run one cycle now
 .venv/bin/python score.py --no-update           # print the scorecard any time
+.venv/bin/python score.py --no-update --settings current   # only today's settings
 sudo systemctl disable --now jev-desk.timer     # stop it
 ```
 
@@ -70,14 +78,21 @@ After pulling new code, nothing needs reinstalling: the next cycle uses it. Re-r
 
 ## The dashboard
 
+`deploy/install.sh` also installs the dashboard as a service. It starts on boot,
+restarts itself if it crashes, and replaces one you started by hand. Open
+**http://raspberry-3-14-15.local:8080** on any computer on your home network (or
+`http://<pi ip>:8080`; `hostname -I` on the Pi shows its IP). It is read-only: it shows
+the desk, and it can't change or trade anything.
+
 ```bash
-.venv/bin/python dashboard/server.py
+systemctl status jev-dashboard                  # is it running?
+journalctl -u jev-dashboard -f                  # its log
+sudo systemctl restart jev-dashboard            # after pulling changes to dashboard/server.py
+sudo systemctl disable --now jev-dashboard      # stop it for good
 ```
 
-Then open **http://raspberry-3-14-15.local:8080** on any computer on your home network
-(or `http://<pi ip>:8080`; `hostname -I` on the Pi shows its IP). It is read-only: it
-shows the desk, it can't change or trade anything. Ctrl+C stops it. A later step makes
-it a service that starts on boot.
+Changes to the page itself (`dashboard/static/`) only need a browser refresh
+(Ctrl+Shift+R). To run it by hand instead: `.venv/bin/python dashboard/server.py`.
 
 See `ARCHITECTURE.md` for diagrams of how it all fits together, and `GLOSSARY.md` for
 plain-English definitions of the terms used.
@@ -103,6 +118,7 @@ plain-English definitions of the terms used.
 | `deploy/` | systemd timer, service, and `install.sh` |
 | `ARCHITECTURE.md` | diagrams of the whole pipeline |
 | `GLOSSARY.md` | plain-English definitions of the terms used |
+| `settings_stamp.py` | the short code for the settings that decided each tracked token |
 | `CHANGELOG.md` | what changed and when |
 
 ## Fixes vs. the original guide

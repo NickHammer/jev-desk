@@ -7,7 +7,7 @@ import sqlite3
 import time
 from pathlib import Path
 
-from thresholds import (BENCH_MINUTES, DEFAULT_BENCH, HARD, CHECKPOINTS,
+from thresholds import (BENCH_MINUTES, DEFAULT_BENCH, HARD, CHECKPOINTS, GONE_AFTER_TRIES,
                         TRACK_DEDUP_HOURS, CHECKPOINT_WINDOW, MISSING_ANSWER_BENCH)
 
 DB = sqlite3.connect(Path(__file__).with_name("desk.db"))
@@ -20,7 +20,15 @@ CREATE TABLE IF NOT EXISTS tracked(
   id INTEGER PRIMARY KEY, addr TEXT, ticker TEXT, run TEXT, judged_at REAL,
   verdict TEXT, fails TEXT, price0 REAL,
   p_1h REAL, min_1h REAL, p_6h REAL, min_6h REAL, p_24h REAL, min_24h REAL);
+CREATE TABLE IF NOT EXISTS settings(
+  stamp TEXT PRIMARY KEY, first_seen REAL, settings TEXT);
 """)
+# columns added after the first release; existing databases get them on first use
+_have = {c[1] for c in DB.execute("PRAGMA table_info(tracked)")}
+for _col, _type in [("config", "TEXT"), *((f"tries_{cp}", "INTEGER DEFAULT 0") for cp in CHECKPOINTS)]:
+    if _col not in _have:
+        DB.execute(f"ALTER TABLE tracked ADD COLUMN {_col} {_type}")
+DB.commit()
 
 
 def watch(tokens: list[dict], source: str) -> int:
@@ -88,23 +96,32 @@ def sit_longest(addr: str, reasons: list[str]) -> str | None:
 
 # --- Phase 4: tracked outcomes ------------------------------------------------
 
-def track(rows: list[dict], run: str) -> int:
-    """Remember judged tokens with their price at judgement time.
+def remember_settings(stamp: str, settings: str):
+    """Keep what each settings stamp meant, the first time it is seen."""
+    DB.execute("INSERT OR IGNORE INTO settings VALUES (?,?,?)", (stamp, time.time(), settings))
+    DB.commit()
+
+
+def track(rows: list[dict], run: str, stamp: str | None = None) -> int:
+    """Remember tokens with their price now, so their outcome can be scored later.
     One row per token per TRACK_DEDUP_HOURS, so a token judged every run isn't counted
-    many times; a pick is always recorded, even if the token was tracked earlier."""
+    many times; a pick is always recorded, even if the token was tracked earlier.
+    The control group is deduplicated on its own, so a control token that Jev later
+    judges is tracked in both groups."""
     now, added = time.time(), 0
     for r in rows:
         if not r.get("price0") or r["price0"] <= 0:
             continue                                   # can't score without a start price
+        same_group = "verdict = 'control'" if r["verdict"] == "control" else "verdict != 'control'"
         recent = {v for (v,) in DB.execute(
-            "SELECT verdict FROM tracked WHERE addr=? AND judged_at>?",
+            f"SELECT verdict FROM tracked WHERE addr=? AND judged_at>? AND {same_group}",
             (r["addr"], now - TRACK_DEDUP_HOURS * 3600))}
         if recent and not (r["verdict"] == "pick" and "pick" not in recent):
             continue
-        DB.execute("INSERT INTO tracked(addr, ticker, run, judged_at, verdict, fails, price0)"
-                   " VALUES (?,?,?,?,?,?,?)",
+        DB.execute("INSERT INTO tracked(addr, ticker, run, judged_at, verdict, fails, price0, config)"
+                   " VALUES (?,?,?,?,?,?,?,?)",
                    (r["addr"], r["ticker"], run, now, r["verdict"],
-                    json.dumps(r.get("fails") or []), r["price0"]))
+                    json.dumps(r.get("fails") or []), r["price0"], stamp))
         added += 1
     DB.commit()
     return added
@@ -126,11 +143,22 @@ def due_checkpoints() -> list[dict]:
 
 
 def checkpoint_state(row: dict, name: str) -> str:
-    """'priced', 'missed' (window closed unpriced), or 'pending' (not due or still open)."""
+    """'priced'; 'gone' (window closed and every try found no price: likely rugged or
+    delisted); 'missed' (window closed without enough tries, e.g. the Pi was off); or
+    'pending' (not due yet, or its window is still open)."""
     if row.get(f"p_{name}") is not None:
         return "priced"
     closes = row["judged_at"] + (CHECKPOINTS[name] + CHECKPOINT_WINDOW[name]) * 60
-    return "missed" if time.time() >= closes else "pending"
+    if time.time() < closes:
+        return "pending"
+    return "gone" if (row.get(f"tries_{name}") or 0) >= GONE_AFTER_TRIES else "missed"
+
+
+def no_price(rid: int, checkpoint: str):
+    """A checkpoint was due but GeckoTerminal had no price for the token."""
+    DB.execute(f"UPDATE tracked SET tries_{checkpoint} = COALESCE(tries_{checkpoint}, 0) + 1 "
+               f"WHERE id=?", (rid,))
+    DB.commit()
 
 
 def fill(rid: int, checkpoint: str, price: float, minutes: float):

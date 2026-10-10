@@ -87,6 +87,12 @@ TRACK_DEDUP_HOURS = 24       # a token judged again within this window isn't re-
 # A checkpoint is only priced inside this window after it falls due (minutes).
 # Outside it, the checkpoint is recorded as missed rather than filled with a late price.
 CHECKPOINT_WINDOW = {"1h": 30, "6h": 120, "24h": 360}
+# The comparison group: each cycle, this many random market survivors are tracked as
+# "control" without being judged, the baseline Jev's picks and passes must beat.
+CONTROL_PER_CYCLE = 3
+# A checkpoint whose window closed with no price after at least this many tries is
+# counted as "gone" (likely rugged or delisted) instead of quietly dropped.
+GONE_AFTER_TRIES = 2
 
 # --- Phase 5: running unattended ---------------------------------------------
 RUN_KEEP_DAYS = 7            # runs/judged-*.json older than this are deleted

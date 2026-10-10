@@ -2,6 +2,39 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: Better data, and the dashboard as a service
+
+### Added
+- **Control group (the baseline).** Each scan also tracks 3 random tokens that passed
+  the free market check (`CONTROL_PER_CYCLE`), with no chain check and no Jev. They are
+  priced at 1h, 6h and 24h like everything else. Jev's passes have to beat them to be
+  worth paying for. The scorecard and the dashboard's P&L chart show them as their own
+  group, "control".
+- **Gone checkpoints.** A checkpoint that still has no price after 2+ tries when its
+  window closes (`GONE_AFTER_TRIES`) is counted as "gone", meaning likely rugged or
+  delisted, instead of quietly missed. The scorecard adds a worst-case table that counts
+  gone checkpoints as −100%, so vanished rugs no longer make the averages look better.
+- **Settings stamp** (`settings_stamp.py`). Every tracked token carries an 8-character
+  code for the settings that decided it: the decision settings in `thresholds.py` plus
+  `questions.py`, `judge.py` and `filter.py`. `python score.py --settings current`
+  shows only tokens tracked under today's settings, so a tuning change never mixes
+  before-and-after results. The new `settings` table remembers what each stamp meant.
+- **The dashboard runs as a service** (`deploy/jev-dashboard.service`). It starts on
+  boot and restarts itself if it crashes. `deploy/install.sh` installs it and stops a
+  dashboard you started by hand.
+
+### Changed
+- The scorecard's "all" row is now "judged" (pick + pass + reject). The control group
+  is kept apart from it.
+- The scorecard footer counts checkpoints as priced, pending, gone or missed, and lists
+  the settings stamps it includes.
+- The dashboard's Scorekeeper card shows "N judged · N control". The floor's "judged
+  today" strip and scoreboard leave the control group out.
+- `desk.db` gets its new columns and table automatically on the next run. Nothing
+  already tracked is lost; those tokens show as "unstamped".
+
+No verdict changes: every threshold and Jev question is exactly as before.
+
 ## 2026-10-10: Glossary
 
 ### Added

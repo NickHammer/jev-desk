@@ -14,15 +14,16 @@ flowchart TD
     timer --> cycle["run_all.sh<br/>one cycle"]
     cycle --> scan["run_scan.py<br/>find and fact-check launches"]
     scan --> latest[("runs/latest.json<br/>finalists")]
+    scan --> tracked
     latest --> judgeRun["run_judge.py<br/>Jev judges the finalists"]
     judgeRun --> judged[("runs/judged-*.json<br/>answers + shadow pick")]
-    judgeRun --> tracked[("tracked table in desk.db<br/>every judged token + its price")]
+    judgeRun --> tracked[("tracked table in desk.db<br/>judged tokens + control group,<br/>price and settings stamp")]
     cycle --> scoreRun["score.py<br/>re-prices at 1h / 6h / 24h"]
     tracked --> scoreRun
-    scoreRun --> card["scorecard<br/>picks vs passes vs rejects"]
+    scoreRun --> card["scorecard<br/>picks vs passes vs rejects vs control"]
     cycle --> logs[("journalctl -u jev-desk<br/>every cycle's output")]
     scan & judgeRun & scoreRun -.-> ev[("runs/events.jsonl<br/>one line per event, 48h")]
-    ev -.-> dash["dashboard/server.py<br/>read-only, port 8080"]
+    ev -.-> dash["dashboard/server.py<br/>always-on service, read-only, port 8080"]
     tracked -.-> dash
     dash -.-> browser(["your browser<br/>Nick's Jev Trading Desk"])
 
@@ -252,16 +253,40 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    T[("tracked table<br/>price at judgement, verdict, failed checks")] --> D{"a checkpoint is due?<br/>1h, 6h or 24h after judgement"}
+    J["run_judge.py<br/>pick, pass, reject"] --> T
+    C["run_scan.py<br/>3 random market survivors<br/>per cycle: control"] --> T
+    T[("tracked table<br/>price now, group, failed checks,<br/>settings stamp")] --> D{"a checkpoint is due?<br/>1h, 6h or 24h later"}
     D -- "not yet" --> W["wait for a later run"]
-    D -- "window closed" --> GU["record as missed<br/>never filled with a late price"]
     D -- due --> PR["GeckoTerminal tokens/multi<br/>current price, 30 per call"]
-    PR -- "no price" --> RT["retry on a later run"]
+    PR -- "no price" --> RT["count the try,<br/>retry on a later run"]
     PR -- price --> F["store price + minutes elapsed"]
+    D -- "window closed" --> GU{"tried 2+ times<br/>and never priced?"}
+    GU -- yes --> GO["gone: likely rugged<br/>-100% in the worst case"]
+    GU -- no --> MI["missed<br/>never filled with a late price"]
     F --> R["scorecard"]
-    R --> R1["by verdict<br/>pick, pass, reject, all"]
+    GO --> R
+    R --> R1["by group<br/>pick, pass, reject, judged, control"]
     R --> R2["rejects by check<br/>did this check throw away winners?"]
+    R --> R3["worst case<br/>gone counted as -100%"]
 ```
+
+**The control group** is the baseline. Each scan tracks 3 random tokens that passed the
+free market check (`CONTROL_PER_CYCLE`), without any chain check or Jev. They are priced
+exactly like judged tokens. Jev is only worth paying for if its passes beat the control
+group. The control group is deduplicated on its own, so a token can be in both.
+
+**Gone vs missed.** A checkpoint whose window closes after 2+ tries with no price at all
+(`GONE_AFTER_TRIES`) is "gone": the token most likely rugged or was delisted. Leaving
+these out would make every group look better than reality, so the scorecard adds a
+worst-case table with gone checkpoints counted as −100%. "Missed" now means too few
+tries, for example because the Pi was off.
+
+**The settings stamp** (`settings_stamp.py`) is an 8-character code for everything that
+decides a verdict: the decision settings in `thresholds.py` plus `questions.py`,
+`judge.py` and `filter.py`. Every tracked token carries the stamp in force when it was
+tracked, and the `settings` table remembers what each stamp meant. After a tuning
+change, `python score.py --settings current` shows only tokens judged under the new
+settings. Tokens tracked before stamps existed show as "unstamped".
 
 Returns are measured from the price at judgement and shown after an assumed 3%
 round-trip cost (`ROUND_TRIP_COST_PCT`). "Win" is the share of tokens that would have
@@ -272,8 +297,8 @@ Each checkpoint is only priced in a short window after it falls due
 (`CHECKPOINT_WINDOW`: 30 min after 1h, 2 h after 6h, 6 h after 24h). With the timer
 running every 15 minutes, checkpoints land within minutes of their mark.
 
-The scorecard warns until each group has 30+ results at 24h. Before that, differences
-are noise.
+The scorecard warns until pass and control each have 30+ results at 24h. Before that,
+differences are noise.
 
 ## 5. A token's life
 
@@ -320,7 +345,8 @@ flowchart LR
     subgraph support["Support"]
         th["thresholds.py<br/>every tunable number"]
         ev2["events.py<br/>event log"]
-        db["db.py<br/>watchlist, bench, tracked"]
+        db["db.py<br/>watchlist, bench, tracked, settings"]
+        st["settings_stamp.py<br/>settings stamp"]
         su["solana_util.py<br/>wallet vs pool test"]
     end
     tm(["systemd timer"]) --> ra["run_all.sh"]
@@ -328,6 +354,7 @@ flowchart LR
     rs --> src & col & fil & db
     rj --> jd & fil & db
     sc --> src & db
+    rs & rj --> st
     jd --> qs
     src --> su
     src & fil & db & jd --> th
@@ -340,12 +367,12 @@ flowchart LR
 | Place | What | Kept in git? |
 |---|---|---|
 | `.env` | Jev key, Helius RPC URL, `RPC_PER_MINUTE` | **never** |
-| `desk.db` | watchlist, bench and tracked outcomes (SQLite) | no |
+| `desk.db` | watchlist, bench, tracked outcomes and settings stamps (SQLite) | no |
 | `runs/latest.json` | finalists from the last scan | no |
 | `runs/judged-*.json` | every Jev answer, model id, and shadow pick; kept 7 days | no |
 | `runs/events.jsonl` | the event log the dashboard reads; kept 48 hours | no |
 | systemd journal | each cycle's output (`journalctl -u jev-desk`) | no |
-| `/etc/systemd/system/jev-desk.*` | the installed timer, from `deploy/` | no (templates are) |
+| `/etc/systemd/system/jev-desk.*`, `jev-dashboard.service` | the installed timer and dashboard service, from `deploy/` | no (templates are) |
 | everything else | code and docs | yes |
 
 ## 8. Roadmap
@@ -360,7 +387,8 @@ flowchart LR
 | D1 | Dashboard: event log, server, every panel on real data | done |
 | D2 | Dashboard: the look, pixel office and characters | done |
 | D2.1 | Dashboard: cards on the left, detailed pixel-art floor | done |
-| D3 | Dashboard: the courier cat and event-driven animation, with replay | **built, testing** |
-| D4 | Dashboard: polish, always-on service, docs | next |
+| D3 | Dashboard: the courier cat and event-driven animation, with replay | done |
+| D4 | Dashboard: always-on service, control group on the page, docs | **built, testing** |
+| 4.1 | Scorekeeper: control group, gone checkpoints, settings stamp | **built, collecting data** |
 | 6 | Review the scorecard (1–2 weeks of data); decide whether execution is worth building | planned |
 | later | Optional X reading via xAI | idea |

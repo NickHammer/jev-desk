@@ -97,8 +97,10 @@ def scorecard():
         r["net"] = {cp: _net(r, cp) for cp in CHECKPOINTS}
 
     by_verdict = {}
-    for group in ("pick", "pass", "reject", "all"):
-        members = rows if group == "all" else [r for r in rows if r["verdict"] == group]
+    judged = [r for r in rows if r["verdict"] != "control"]
+    for group in ("pick", "pass", "reject", "control", "all"):
+        # "all" means every token Jev judged; the control group is kept apart
+        members = judged if group == "all" else [r for r in rows if r["verdict"] == group]
         by_verdict[group] = {cp: _cell([r["net"][cp] for r in members
                                         if r["net"][cp] is not None]) for cp in CHECKPOINTS}
     checks = defaultdict(list)
@@ -112,7 +114,8 @@ def scorecard():
     series = [{"t": r["judged_at"], "ticker": r["ticker"], "verdict": r["verdict"],
                "net": r["net"]} for r in rows]
     return {"series": series, "by_verdict": by_verdict, "by_check": by_check,
-            "counts": {"tracked": len(rows), "watchlist": watch, "benched": benched}}
+            "counts": {"tracked": len(rows), "judged": len(judged),
+                       "control": len(rows) - len(judged), "watchlist": watch, "benched": benched}}
 
 
 def _cycles(evts):

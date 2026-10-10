@@ -7,6 +7,7 @@
 
 import argparse
 import json
+import random
 from collections import Counter
 from pathlib import Path
 
@@ -16,11 +17,12 @@ load_dotenv(Path(__file__).with_name(".env"))   # before sources reads SOLANA_RP
 
 import db                                         # noqa: E402
 import events                                     # noqa: E402
+import settings_stamp                             # noqa: E402
 import sources                                    # noqa: E402
 from collect import from_pools, add_dossier       # noqa: E402
 from filter import market_kill, chain_kill        # noqa: E402
 from thresholds import (NEW_POOL_PAGES, TRENDING_PAGES, MAX_DOSSIERS,  # noqa: E402
-                        MULTI_BATCH, MAX_MARKET_CALLS, STALE_HOURS)
+                        MULTI_BATCH, MAX_MARKET_CALLS, STALE_HOURS, CONTROL_PER_CYCLE)
 
 # failures that won't fix themselves on an old token: stop watching it entirely
 STALE_REASONS = {"liquidity", "volume", "trades", "mcap", "bonding_curve", "no_pair",
@@ -92,6 +94,17 @@ def main():
     print(f"   pools by dex: {dict(dexes.most_common())}")
     events.emit("market", "done", checked=len(todo), survived=len(survivors),
                 dropped=dropped, kills=dict(kills))
+
+    # The comparison group: a few random market survivors, tracked without any
+    # judgement. Jev's passes have to beat these to be worth anything.
+    priced = [t for t in survivors if t.get("price_usd")]
+    sample = random.sample(priced, min(CONTROL_PER_CYCLE, len(priced)))
+    stamp = settings_stamp.current()
+    db.remember_settings(stamp, settings_stamp.settings_json())
+    n = db.track([{"addr": t["addr"], "ticker": t["ticker"], "price0": t["price_usd"],
+                   "verdict": "control", "fails": []} for t in sample],
+                 run=events.CYCLE, stamp=stamp)
+    print(f"control group: {n} random market survivor(s) newly tracked as the baseline")
 
     # 2. Dossier pass: the deepest-liquidity candidates get GT info + RPC holders
     # deepest pools first: liquidity is hard to fake, unlike volume

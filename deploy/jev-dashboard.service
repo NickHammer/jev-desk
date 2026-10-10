@@ -1,0 +1,19 @@
+# Template: deploy/install.sh fills in __USER__ and __DIR__.
+# Nick's Jev Trading Desk: the read-only dashboard, always on, on port 8080.
+[Unit]
+Description=jev-desk dashboard (read-only web page on port 8080)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/.venv/bin/python __DIR__/dashboard/server.py --port 8080
+Environment=PYTHONUNBUFFERED=1
+Restart=on-failure
+RestartSec=5
+Nice=5
+
+[Install]
+WantedBy=multi-user.target
