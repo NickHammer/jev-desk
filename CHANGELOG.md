@@ -2,6 +2,14 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: Glossary
+
+### Added
+- **`GLOSSARY.md`**: short, plain-English definitions of the terms used across the
+  project, its output and the dashboard, in four groups: testing for an edge,
+  memecoins and Solana, how the desk works, and the services it uses. It is linked
+  from the README.
+
 ## 2026-10-09: Dashboard, step 3 (the courier cat and the show)
 
 ### Added

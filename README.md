@@ -79,7 +79,8 @@ Then open **http://raspberry-3-14-15.local:8080** on any computer on your home n
 shows the desk, it can't change or trade anything. Ctrl+C stops it. A later step makes
 it a service that starts on boot.
 
-See `ARCHITECTURE.md` for diagrams of how it all fits together.
+See `ARCHITECTURE.md` for diagrams of how it all fits together, and `GLOSSARY.md` for
+plain-English definitions of the terms used.
 
 ## Files
 
@@ -101,6 +102,7 @@ See `ARCHITECTURE.md` for diagrams of how it all fits together.
 | `dashboard/` | the dashboard server and page |
 | `deploy/` | systemd timer, service, and `install.sh` |
 | `ARCHITECTURE.md` | diagrams of the whole pipeline |
+| `GLOSSARY.md` | plain-English definitions of the terms used |
 | `CHANGELOG.md` | what changed and when |
 
 ## Fixes vs. the original guide
