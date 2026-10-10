@@ -1106,12 +1106,11 @@ const Office = (() => {
     return ytReady;
   }
 
-  function tvSource() {                               // what to load: our video list, or the playlist
-    const ids = tv.videos.map((v) => v.id).filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id));
-    if (ids.length) return ids;
+  function tvSource() {                               // what to load: your playlist, else the feed list
     if (tv.playlist && /^[A-Za-z0-9_-]{10,64}$/.test(tv.playlist))
       return { list: tv.playlist, listType: "playlist", index: 0 };
-    return null;
+    const ids = tv.videos.map((v) => v.id).filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id));
+    return ids.length ? ids : null;
   }
 
   function tvCount() {

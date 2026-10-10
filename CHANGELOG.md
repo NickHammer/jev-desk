@@ -2,6 +2,14 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: Pacers TV plays your playlist first
+
+### Fixed
+- **The TV showed "1 / 1" and one 2-minute video.** When a YouTube feed briefly worked
+  and found a single highlight, that one-video list took priority over the playlist set
+  in `.env`. The playlist you chose (`TV_PLAYLIST`) now always comes first, and the
+  feeds are only used without one.
+
 ## 2026-10-10: Pacers TV, skip buttons and real looping
 
 ### Fixed

@@ -100,9 +100,10 @@ loop with YouTube's own player. ⏮ ⏭ on the TV cabinet skip through the list 
 around), and the caption shows where you are, e.g. "3 / 24". Press Esc or click again
 to turn it off.
 
-It first tries the Pacers and NBA channel feeds (`HIGHLIGHT_SOURCES` in
-`dashboard/server.py`). If those give nothing, it plays a playlist you choose. Add one
-line to `.env`, the playlist's link or just its `PL...` id, then restart the dashboard:
+It plays a playlist you choose, set as one line in `.env` (the playlist's link or just
+its `PL...` id). Without one, it falls back to the Pacers and NBA channel feeds
+(`HIGHLIGHT_SOURCES` in `dashboard/server.py`). After changing it, restart the
+dashboard:
 
 ```bash
 printf '\nTV_PLAYLIST=https://www.youtube.com/playlist?list=PL...\n' >> .env
