@@ -346,7 +346,26 @@ async function pollState() {
 }
 
 buildCards();
-Office.init($("#floor"), $("#chips"));
+Office.init($("#floor"), $("#chips"), $("#tv"));
+
+// The break-corner TV: the 📺 button (or the remote on the floor) turns it on and off.
+// Videos are only fetched while it is on, at most every 30 minutes by the server.
+let tvVideos = null, tvFetchedAt = 0;
+async function toggleTv() {
+  const on = !Office.tvOn();
+  $("#tv-btn").setAttribute("aria-pressed", String(on));
+  if (!on) { Office.tv(false); return; }
+  if (!tvVideos || Date.now() - tvFetchedAt > 30 * 60 * 1000) {
+    try {
+      const r = await (await fetch("/api/highlights")).json();
+      tvVideos = r.videos || []; tvFetchedAt = Date.now();
+    } catch (_) { tvVideos = tvVideos || []; }
+  }
+  if ($("#tv-btn").getAttribute("aria-pressed") === "true") Office.tv(true, tvVideos);
+}
+$("#tv-btn").onclick = toggleTv;
+addEventListener("keydown", (e) => { if (e.key === "Escape" && Office.tvOn()) toggleTv(); });
+Office.onTvClick = toggleTv;
 setInterval(() => S && Office.update(S, { active: activeStage() }), 500);
 tickClock(); setInterval(tickClock, 1000);
 pollState(); setInterval(pollState, 10000);

@@ -94,6 +94,12 @@ sudo systemctl disable --now jev-dashboard      # stop it for good
 Changes to the page itself (`dashboard/static/`) only need a browser refresh
 (Ctrl+Shift+R). To run it by hand instead: `.venv/bin/python dashboard/server.py`.
 
+**📺 Pacers TV:** the button in the top bar, or the remote on the floor's couch, turns
+on the TV in the break corner. It plays the latest Pacers highlights from YouTube in a
+loop with YouTube's own player; press Esc or click again to turn it off. If it ever
+shows the wrong channel, the channel IDs are in `HIGHLIGHT_SOURCES` in
+`dashboard/server.py`.
+
 See `ARCHITECTURE.md` for diagrams of how it all fits together, and `GLOSSARY.md` for
 plain-English definitions of the terms used.
 

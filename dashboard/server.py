@@ -12,10 +12,12 @@ Endpoints
     GET /api/events?since=<unix>   events after a time (live animation)
     GET /api/cycle[?id=<cycle>]    every event of one cycle (default: the last finished)
     GET /api/ohlcv?pool=<address>  5-minute candles for one pool, cached
+    GET /api/highlights            latest Pacers highlight videos (YouTube feeds), cached
 """
 
 import argparse
 import json
+import re
 import sqlite3
 import statistics
 import sys
@@ -27,6 +29,7 @@ from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from xml.etree import ElementTree
 
 import requests
 
@@ -223,6 +226,62 @@ def ohlcv(pool: str):
         return {"pool": pool, "candles": candles, "cached": False}
 
 
+# --- Pacers highlights (the 🏀 button) ----------------------------------------------
+# Each channel's public upload feed lists its latest 15 videos; no API key needed.
+# A video is kept when its title contains every word in "must" (any case). The videos
+# are only embedded with YouTube's own player, never downloaded.
+HIGHLIGHT_SOURCES = [
+    {"name": "Indiana Pacers", "channel": "UCUQDCnAwU-35cOo8WCzg6zA", "must": ["highlight"]},
+    {"name": "NBA", "channel": "UCWJ2lWNubArHWmf3FIHbfcQ", "must": ["pacers", "highlight"]},
+]
+HIGHLIGHTS_CACHE_SECONDS = 1800
+YT_FEED = "https://www.youtube.com/feeds/videos.xml?channel_id={}"
+VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+NS = {"a": "http://www.w3.org/2005/Atom", "yt": "http://www.youtube.com/xml/schemas/2015"}
+
+_hl_cache = {"at": 0.0, "data": None}
+_hl_lock = threading.Lock()
+
+
+def parse_feed(xml_text: str, must: list[str]) -> tuple[str | None, list[dict]]:
+    """Channel name and the matching videos from one YouTube upload feed."""
+    root = ElementTree.fromstring(xml_text)
+    author = root.findtext("a:author/a:name", default=None, namespaces=NS)
+    out = []
+    for e in root.findall("a:entry", NS):
+        vid = e.findtext("yt:videoId", default="", namespaces=NS)
+        title = e.findtext("a:title", default="", namespaces=NS)
+        if VIDEO_ID.match(vid) and all(w in title.lower() for w in must):
+            out.append({"id": vid, "title": title[:200], "channel": author,
+                        "published": e.findtext("a:published", default="", namespaces=NS)})
+    return author, out
+
+
+def highlights():
+    with _hl_lock:
+        if _hl_cache["data"] and time.time() - _hl_cache["at"] < HIGHLIGHTS_CACHE_SECONDS:
+            return _hl_cache["data"]
+        videos, sources, errors = [], [], []
+        for src in HIGHLIGHT_SOURCES:
+            try:
+                r = requests.get(YT_FEED.format(src["channel"]), timeout=15)
+                r.raise_for_status()
+                author, found = parse_feed(r.text, src["must"])
+                sources.append({"name": src["name"], "feed_author": author, "found": len(found)})
+                videos += found
+            except Exception as e:
+                errors.append(f"{src['name']}: {str(e)[:100]}")
+        seen, unique = set(), []
+        for v in sorted(videos, key=lambda v: v["published"], reverse=True):
+            if v["id"] not in seen:
+                seen.add(v["id"]); unique.append(v)
+        data = {"videos": unique[:20], "sources": sources, "errors": errors, "fetched_at": time.time()}
+        if not unique and _hl_cache["data"]:          # keep the last good list if a fetch fails
+            data = {**_hl_cache["data"], "errors": errors}
+        _hl_cache.update(at=time.time(), data=data)
+        return data
+
+
 # --- HTTP ------------------------------------------------------------------------
 
 class Handler(SimpleHTTPRequestHandler):
@@ -258,6 +317,8 @@ class Handler(SimpleHTTPRequestHandler):
                 return self._send_json({"cycle": cid, "events": cycles.get(cid, [])})
             if url.path == "/api/ohlcv":
                 return self._send_json(ohlcv(q.get("pool", "")))
+            if url.path == "/api/highlights":
+                return self._send_json(highlights())
         except Exception as e:
             return self._send_json({"error": str(e)[:200]}, HTTPStatus.INTERNAL_SERVER_ERROR)
         if url.path.startswith("/api/"):

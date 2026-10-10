@@ -2,6 +2,29 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: Pacers TV on the floor
+
+### Added
+- **A TV in the floor's break corner**, on a low cabinet in front of the couch, with a
+  remote on the couch seat.
+  - **Turning it on:** the 📺 PACERS TV button in the top bar, or a click on the TV or
+    the remote. The screen warms up like an old CRT, then plays the latest Pacers
+    highlights in a loop with YouTube's own embedded player, laid over the TV's screen.
+  - **Turning it off:** Esc, the button or the remote. It shrinks to a dot and goes dark.
+  - **While it's on:** it lights up the corner and the couch, and its caption shows how
+    many videos are in the rotation. With nothing to play it shows static.
+  - **Small screens:** where the TV would be under YouTube's 200 px minimum, the player
+    pops out slightly larger, with a pink border.
+- **`/api/highlights`**: the server reads the public YouTube upload feeds of the Pacers
+  and NBA channels. It keeps titles containing "highlight" (plus "Pacers" for the NBA
+  channel), drops anything that isn't a valid video id, removes duplicates and keeps
+  the newest 20. Results are cached for 30 minutes, and nothing is fetched unless the TV
+  is turned on. Videos are only embedded (youtube-nocookie.com), never downloaded.
+
+### Changed
+- The reject bin moved next to the TV, and the water cooler is only drawn when there is
+  no room for a TV.
+
 ## 2026-10-10: Better data, and the dashboard as a service
 
 ### Added

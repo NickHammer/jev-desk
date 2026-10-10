@@ -76,6 +76,8 @@ flowchart LR
     end
     srv -- "/api/state every 10 s<br/>/api/events every 3 s" --> page["the page<br/>cards, ticker, charts, thresholds"]
     srv <-- "candles, cached 5 min,<br/>1 call per 30 s max" --> gt2["GeckoTerminal"]
+    srv <-- "upload feeds, cached 30 min,<br/>only while the TV is on" --> yt["YouTube<br/>Pacers + NBA channels"]
+    page -- "embedded player" --> yt
 ```
 
 **Page layout.** The eight stage cards run down the left side; the floor sits right of
@@ -159,6 +161,21 @@ flowchart LR
 | `pick.decision` | Pick walks to the head desk: "would buy X" or "no trade"; the Desk answers |
 | `score.priced` | Scorekeeper walks to the scoreboard: ticker, checkpoint, result after cost |
 | `desk.cycle_end` | Desk: "cycle done ✓" (or the failure code) |
+
+**The TV** sits in the break corner on the left of the floor. The 📺 PACERS TV button
+in the top bar, or a click on the TV or the remote on the couch, turns it on. The
+screen warms up like an old CRT, then YouTube's own embedded player
+(youtube-nocookie.com) plays the latest Pacers highlights in a loop, laid exactly over
+the TV's screen. Nothing is downloaded or stored.
+
+- **Where the list comes from:** the server reads the public upload feeds of the Pacers
+  and NBA channels (no API key). It keeps titles with "highlight", plus "Pacers" for the
+  NBA channel, and caches the list for 30 minutes. It only fetches while someone has
+  the TV on.
+- **Small screens:** YouTube's player needs at least 200 px of height. Where the TV is
+  smaller than that, the player pops out slightly larger over the floor, with a pink
+  border.
+- **Turning it off:** Esc, the button or the remote. The rest of the floor never pauses.
 
 The dashboard only reads. Each card maps to a stage. The ticker shows events as they
 land. The shadow P&L chart is the scorecard as a running total ($100 per token, after

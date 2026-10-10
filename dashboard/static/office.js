@@ -15,6 +15,8 @@
 //   Office.event(e)                  one live event from /api/events: animate it
 //   Office.replay(events, cycle)     play a finished cycle again, labelled REPLAY
 //   Office.busy()                    true while anything is still animating
+//   Office.tv(on, videos)            turn the break-corner TV on (with YouTube video ids) or off
+//   Office.onTvClick = fn            called when the TV or its remote is clicked on the floor
 //   Office.layout()                  stage id -> {x, y} in page coordinates
 //
 // The show: every event becomes a step (a speech bubble, a walk, or a trip for the
@@ -55,7 +57,7 @@ const Office = (() => {
   };
   const ARMX = { circle: 12, blob: 12, square: 11, triangle: 10, diamond: 9, spiky: 9, bean: 8, ghost: 12 };
 
-  let cv, ctx, art, a, bg, overlay, chipsEl, scale = 1, P = null;
+  let cv, ctx, art, a, bg, overlay, chipsEl, tvEl, scale = 1, P = null;
   let S = null, candles = [], active = null, stateActive = null, running = false;
   const sprites = {};
   const seed = (i) => { const x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x); };
@@ -223,11 +225,29 @@ const Office = (() => {
       rack: { x: W - 38, y: 102, w: 28, h: 130 },
       score: { x: Math.round(Rz + Rw * 0.2), y: 280 },
       scoreboard: { x: Math.round(Rz + Rw * 0.6), y: 214 },
-      bin: { x: Math.round(Math.max(30, L * 0.2)), y: 238 },
-      couch: { x: Math.round(L * 0.5), y: 290 },
-      cooler: L > 230 ? { x: Math.round(L * 0.62), y: 168 } : null,
+      ...leftCorner(L),
       plants: [[Math.round(L * 0.88), 160], [Math.round(L * 0.95), 292], [W - 18, 294],
                [Math.round(Rz - 6), 292]],
+    };
+  }
+
+  // The break corner: a TV on a low cabinet with the couch in front of it, and the
+  // reject bin beside them. Without room for a TV the corner keeps the old layout.
+  function leftCorner(L) {
+    const avail = L - 24;
+    if (avail < 130) {
+      return { bin: { x: Math.round(Math.max(30, L * 0.2)), y: 238 },
+               couch: { x: Math.round(L * 0.5), y: 290 }, tv: null,
+               cooler: L > 230 ? { x: Math.round(L * 0.62), y: 168 } : null };
+    }
+    const sw = Math.min(avail - 46, 220), sh = Math.round((sw * 9) / 16);
+    const tx = 18, ty = 248 - sh - 6;
+    return {
+      tv: { x: tx, y: ty, w: sw, h: sh },               // the screen; bezel and cabinet go around it
+      remote: { x: tx + Math.round(sw / 2) + 20, y: 276 },
+      couch: { x: tx + Math.round(sw / 2), y: 290 },
+      bin: { x: tx + sw + 26, y: 238 },
+      cooler: null,
     };
   }
 
@@ -994,6 +1014,104 @@ const Office = (() => {
     }
   }
 
+
+  // --- the break-corner TV ----------------------------------------------------------
+  const tv = { on: false, since: -9, videos: [], hover: false };
+  function drawTv(t) {
+    const v = P.tv; if (!v) return;
+    const { x, y, w, h } = v, age = now - tv.since;
+    // cabinet
+    shadow(x + w / 2, 263, w / 2 + 14, 3, 0.45);
+    R(x - 9, 248, w + 18, 15, C.outline); R(x - 8, 249, w + 16, 3, "#2d3550"); R(x - 8, 249, w + 16, 1, "#3d4767");
+    R(x - 8, 252, w + 16, 10, "#1b2032");
+    R(x - 4, 254, w / 2 - 6, 6, "#151927"); R(x + w / 2 + 2, 254, w / 2 - 6, 6, "#151927");
+    R(x + w / 2 - 6, 256, 3, 1, C.deskHi); R(x + w / 2 + 4, 256, 3, 1, C.deskHi);
+    R(x + 6, 250, 16, 2, "#0b0e17"); R(x + 19, 250, 1, 1, tv.on ? C.green : "#16301f");   // a little box
+    // the set
+    R(x + w / 2 - 10, 244, 20, 5, C.outline); R(x + w / 2 - 9, 245, 18, 3, "#262c3f");
+    R(x - 5, y - 5, w + 10, h + 10, C.outline); R(x - 4, y - 4, w + 8, h + 8, "#14171f");
+    R(x - 4, y - 4, w + 8, 1, "#2a2f40"); R(x - 4, y + h + 2, w + 8, 2, "#0d0f15");
+    R(x + w + 1, y + h + 2, 2, 1, tv.on ? C.green : C.red);                // power light
+    if (tv.on) {
+      glow(x + w / 2, y + h / 2, w * 0.9, ["#5fb4ff", "#ffa62b", "#b98cff"][Math.floor(t / 4) % 3], 0.1);
+      glow(x + w / 2, 285, w * 0.6, "#5fb4ff", 0.06);                       // light on the couch
+    }
+    // the screen (the video itself is a YouTube player laid over this rectangle)
+    R(x, y, w, h, "#05070b");
+    if (tv.on && age < 0.45) {                                             // CRT warm-up: a line opens out
+      const p = age / 0.45, lh = Math.max(1, Math.round(h * p * p));
+      glow(x + w / 2, y + h / 2, w * 0.5, "#dfe9ff", 0.35 * (1 - p));
+      R(x, y + (h - lh) / 2, w, lh, p < 0.5 ? "#f4f6ff" : "#9fb7d9");
+    } else if (!tv.on && age < 0.35) {                                      // switching off: shrink to a dot
+      const p = age / 0.35, lw = Math.max(1, Math.round(w * (1 - p))), lh = Math.max(1, Math.round(3 * (1 - p)));
+      R(x + (w - lw) / 2, y + h / 2 - lh / 2, lw, lh, "#f4f6ff");
+    } else if (tv.on && !tv.videos.length) {                                // on, nothing to show: static
+      for (let i = 0; i < 260; i++) {
+        const sx = x + Math.floor(seed(i + Math.floor(t * 20) * 7) * w), sy = y + Math.floor(seed(i * 3 + Math.floor(t * 20)) * h);
+        R(sx, sy, 2, 1, seed(i * 11) > 0.5 ? "#8b93a8" : "#3a4058");
+      }
+    } else if (!tv.on) {                                                    // off: glass reflections
+      for (let i = 0; i < Math.min(w, h); i += 1) R(x + w * 0.55 + i * 0.6, y + i, 3, 1, "rgba(255,255,255,.03)");
+      R(x + 3, y + 3, w * 0.25, 1, "rgba(255,255,255,.06)");
+      if (tv.hover) { g.globalAlpha = 0.5; R(x, y, w, h, "#121a2c"); g.globalAlpha = 1; }
+    }
+  }
+
+  function drawRemote() {                             // on the couch seat, drawn after the couch
+    if (!P.tv) return;
+    const r = P.remote, age = now - tv.since;
+    R(r.x - 1, r.y - 1, 6, 11, C.outline); R(r.x, r.y, 4, 9, "#2a2f40"); R(r.x, r.y, 4, 1, "#3a4058");
+    R(r.x + 1, r.y + 1, 2, 2, age < 0.25 ? "#ffd1d8" : C.red);
+    for (let i = 0; i < 3; i++) R(r.x + 1, r.y + 4 + i * 2, 2, 1, "#555d78");
+    if (age < 0.25) glow(r.x + 2, r.y + 2, 6, C.red, 0.6);                 // infrared blink
+  }
+
+  function placeTv() {                                // keep the YouTube player on the TV's screen
+    if (!tvEl) return;
+    const v = P?.tv;
+    if (!v || !tv.on || !tv.videos.length || now - tv.since < 0.45) { tvEl.style.display = "none"; return; }
+    const k = scale / devicePixelRatio, box = cv.parentElement.getBoundingClientRect();
+    let w = v.w * k, h = v.h * k, left = v.x * k, top = (v.y + TOP) * k, big = false;
+    if (h < 200) {                                    // YouTube needs at least 200 px: pop out a bit larger
+      big = true; h = 200; w = (200 * 16) / 9;
+      left = Math.min(left, box.width - w - 4); top = Math.max(4, top + v.h * k - h);
+    }
+    Object.assign(tvEl.style, { display: "block", left: `${left}px`, top: `${top}px`,
+                                width: `${w}px`, height: `${h}px` });
+    tvEl.classList.toggle("big", big);
+  }
+
+  function tvEmbedUrl(ids) {
+    const ok = ids.filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id));
+    const q = new URLSearchParams({ autoplay: "1", playsinline: "1", rel: "0", loop: "1",
+                                    playlist: ok.join(","), origin: location.origin });
+    return ok.length ? `https://www.youtube-nocookie.com/embed/${ok[0]}?${q}` : null;
+  }
+
+  function setTv(on, videos) {
+    tv.on = !!on; tv.since = now;
+    tv.videos = on ? (videos || []) : [];
+    if (!tvEl) return;
+    tvEl.innerHTML = "";
+    const src = on && tvEmbedUrl(tv.videos.map((v) => v.id));
+    if (src) {
+      const f = document.createElement("iframe");
+      Object.assign(f, { src, title: "Pacers highlights", allowFullscreen: true,
+                         referrerPolicy: "strict-origin-when-cross-origin" });
+      f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+      tvEl.appendChild(f);
+    }
+  }
+
+  function tvHit(e) {                                 // is the pointer on the TV or its remote?
+    if (!P?.tv) return false;
+    const r = cv.getBoundingClientRect(), k = r.width / W;
+    const x = (e.clientX - r.left) / k, y = (e.clientY - r.top) / k - TOP;
+    const v = P.tv, m = P.remote;
+    return (x >= v.x - 5 && x <= v.x + v.w + 5 && y >= v.y - 5 && y <= v.y + v.h + 5)
+        || (x >= m.x - 4 && x <= m.x + 8 && y >= m.y - 4 && y <= m.y + 13);
+  }
+
   // --- frame -------------------------------------------------------------------------
   let tags = {}, lastTs = 0;
   function frame(ts) {
@@ -1007,7 +1125,7 @@ const Office = (() => {
     a.save(); a.translate(0, TOP);
     wallScreen(t); verdictBoard();
     rejectBin(t, S ? (S._rejectsToday || 0) : 0);
-    serverRack(t); couch(); cooler(t);
+    serverRack(t); drawTv(t); couch(); drawRemote(); cooler(t);
     P.plants.slice(0, 1).forEach(([x, y], i) => plant(x, y, t, i));
     headDesk(t);
     DESK_ROW.slice(0, 3).forEach((id, i) => desk(id, P.desks[id].x, P.desks[id].y, t, i));
@@ -1030,7 +1148,7 @@ const Office = (() => {
     ctx.imageSmoothingEnabled = false;
     ctx.clearRect(0, 0, cv.width, cv.height);
     ctx.drawImage(art, 0, 0, cv.width, cv.height);
-    text(t);
+    text(t); placeTv();
     requestAnimationFrame(frame);
   }
 
@@ -1080,6 +1198,12 @@ const Office = (() => {
     const b = P.bin;
     label("REJECTED", b.x, b.y + 8, "#7d8499", 4.2);
     if (S) label(String(S._rejectsToday || 0), b.x, b.y - 13.5, C.red, 6.5);
+    if (P.tv) {                                       // the TV's caption, on its cabinet
+      const v = P.tv, n = tv.videos.length;
+      label(tv.on ? (n ? `PACERS HIGHLIGHTS · ${n} VIDEO${n === 1 ? "" : "S"}` : "NO HIGHLIGHTS RIGHT NOW")
+                  : (tv.hover ? "CLICK TO TURN ON" : "TV · CLICK THE REMOTE"),
+            v.x + v.w / 2, 257.5, tv.on ? C.pink : "#6b7290", 4);
+    }
     const sb = P.scoreboard, sc = S?.score?.by_verdict?.all?.["1h"];
     label("SCOREBOARD · 1H", sb.x, sb.y + 7.5, "#7d8499", 4);
     label(sc?.n ? `${sc.avg >= 0 ? "+" : ""}${sc.avg.toFixed(1)}%  n=${sc.n}` : "no 1h prices yet", sb.x, sb.y + 24,
@@ -1116,8 +1240,10 @@ const Office = (() => {
   }
 
   return {
-    init(canvas, chips) {
-      cv = canvas; ctx = cv.getContext("2d"); chipsEl = chips || null;
+    init(canvas, chips, tvBox) {
+      cv = canvas; ctx = cv.getContext("2d"); chipsEl = chips || null; tvEl = tvBox || null;
+      cv.addEventListener("click", (e) => { if (tvHit(e) && Office.onTvClick) Office.onTvClick(); });
+      cv.addEventListener("mousemove", (e) => { tv.hover = tvHit(e); cv.style.cursor = tv.hover ? "pointer" : ""; });
       art = document.createElement("canvas"); a = art.getContext("2d");
       for (const id of ORDER) sprites[id] = makeSprite(id);
       new ResizeObserver(resize).observe(cv.parentElement);
@@ -1153,6 +1279,9 @@ const Office = (() => {
                room_width: W, walkers: Object.keys(walkers) };
     },
     setCandles(cs) { candles = cs || []; },
+    tv(on, videos) { setTv(on, videos); },
+    tvOn() { return tv.on; },
+    onTvClick: null,
     // stage id -> page coordinates of that character 
     layout() {
       const r = cv.getBoundingClientRect(), k = r.width / W, out = {};
