@@ -177,6 +177,9 @@ the TV's screen. Nothing is downloaded or stored.
 - **Small screens:** YouTube's player needs at least 200 px of height. Where the TV is
   smaller than that, the player pops out slightly larger over the floor, with a pink
   border.
+- **Skipping:** ⏮ ⏭ on the cabinet move through the list and wrap around. After the last
+  video it starts again from the first. This uses YouTube's IFrame Player API, loaded
+  only the first time the TV is turned on.
 - **Turning it off:** Esc, the button or the remote. The rest of the floor never pauses.
 
 The dashboard only reads. Each card maps to a stage. The ticker shows events as they

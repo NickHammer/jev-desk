@@ -96,7 +96,9 @@ Changes to the page itself (`dashboard/static/`) only need a browser refresh
 
 **📺 Pacers TV:** the button in the top bar, or the remote on the floor's couch, turns
 on the TV in the break corner. It plays the latest Pacers highlights from YouTube in a
-loop with YouTube's own player; press Esc or click again to turn it off.
+loop with YouTube's own player. ⏮ ⏭ on the TV cabinet skip through the list (it wraps
+around), and the caption shows where you are, e.g. "3 / 24". Press Esc or click again
+to turn it off.
 
 It first tries the Pacers and NBA channel feeds (`HIGHLIGHT_SOURCES` in
 `dashboard/server.py`). If those give nothing, it plays a playlist you choose. Add one

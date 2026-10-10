@@ -57,7 +57,7 @@ const Office = (() => {
   };
   const ARMX = { circle: 12, blob: 12, square: 11, triangle: 10, diamond: 9, spiky: 9, bean: 8, ghost: 12 };
 
-  let cv, ctx, art, a, bg, overlay, chipsEl, tvEl, scale = 1, P = null;
+  let cv, ctx, art, a, bg, overlay, chipsEl, tvEl, tvCtrl, scale = 1, P = null;
   let S = null, candles = [], active = null, stateActive = null, running = false;
   const sprites = {};
   const seed = (i) => { const x = Math.sin(i * 12.9898) * 43758.5453; return x - Math.floor(x); };
@@ -1069,7 +1069,9 @@ const Office = (() => {
   function placeTv() {                                // keep the YouTube player on the TV's screen
     if (!tvEl) return;
     const v = P?.tv;
-    if (!v || !tv.on || !(tv.videos.length || tv.playlist) || now - tv.since < 0.45) { tvEl.style.display = "none"; return; }
+    const showing = v && tv.on && (tv.videos.length || tv.playlist) && now - tv.since >= 0.45;
+    if (tvCtrl) tvCtrl.style.display = showing ? "flex" : "none";
+    if (!showing) { tvEl.style.display = "none"; return; }
     const k = scale / devicePixelRatio, box = cv.parentElement.getBoundingClientRect();
     let w = v.w * k, h = v.h * k, left = v.x * k, top = (v.y + TOP) * k, big = false;
     if (h < 200) {                                    // YouTube needs at least 200 px: pop out a bit larger
@@ -1079,36 +1081,80 @@ const Office = (() => {
     Object.assign(tvEl.style, { display: "block", left: `${left}px`, top: `${top}px`,
                                 width: `${w}px`, height: `${h}px` });
     tvEl.classList.toggle("big", big);
+    if (tvCtrl) {                                     // ⏮ ⏭ sit on the right of the cabinet
+      const cabRight = (v.x + v.w + 8) * k, cabMid = (255 + TOP) * k;
+      Object.assign(tvCtrl.style, big ? { left: `${left + w - 64}px`, top: `${top + h + 4}px` }
+                                      : { left: `${cabRight - 66}px`, top: `${cabMid - 10}px` });
+    }
   }
 
-  function tvEmbedUrl(ids, playlist) {
-    const base = { autoplay: "1", playsinline: "1", rel: "0", loop: "1", origin: location.origin };
-    const ok = ids.filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id));
-    if (ok.length) {
-      const q = new URLSearchParams({ ...base, playlist: ok.join(",") });
-      return `https://www.youtube-nocookie.com/embed/${ok[0]}?${q}`;
+  // The player is YouTube's IFrame Player API, loaded only the first time the TV is
+  // turned on. Using the API (not a plain embed link) lets the remote's ⏮ ⏭ buttons
+  // move through the list and lets the list loop back to the start after the last video.
+  let ytReady = null, player = null;
+  function loadYouTubeApi() {
+    if (window.YT?.Player) return Promise.resolve();
+    if (!ytReady) {
+      ytReady = new Promise((resolve) => {
+        const prev = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => { prev?.(); resolve(); };
+        const sc = document.createElement("script");
+        sc.src = "https://www.youtube.com/iframe_api";
+        document.head.appendChild(sc);
+      });
     }
-    if (playlist && /^[A-Za-z0-9_-]{10,64}$/.test(playlist)) {      // the backup: a whole playlist
-      const q = new URLSearchParams({ ...base, list: playlist, listType: "playlist" });
-      return `https://www.youtube-nocookie.com/embed/videoseries?${q}`;
-    }
+    return ytReady;
+  }
+
+  function tvSource() {                               // what to load: our video list, or the playlist
+    const ids = tv.videos.map((v) => v.id).filter((id) => /^[A-Za-z0-9_-]{11}$/.test(id));
+    if (ids.length) return ids;
+    if (tv.playlist && /^[A-Za-z0-9_-]{10,64}$/.test(tv.playlist))
+      return { list: tv.playlist, listType: "playlist", index: 0 };
     return null;
   }
 
-  function setTv(on, feed) {
-    tv.on = !!on; tv.since = now;
+  function tvCount() {
+    tv.index = player?.getPlaylistIndex?.() ?? -1;
+    tv.count = (player?.getPlaylist?.() || []).length;
+  }
+
+  function tvStep(d) {                                // ⏮ / ⏭, wrapping around the ends
+    if (!player?.getPlaylist) return;
+    const n = (player.getPlaylist() || []).length, i = player.getPlaylistIndex();
+    if (!n) return;
+    player.playVideoAt((i + d + n) % n);
+    tv.since = now - 0.45;                            // a short blink of the remote, no warm-up
+  }
+
+  async function setTv(on, feed) {
+    tv.on = !!on; tv.since = now; tv.index = -1; tv.count = 0;
     tv.videos = on ? (feed?.videos || []) : [];
     tv.playlist = on ? (feed?.playlist || null) : null;
+    if (player) { try { player.destroy(); } catch (_) { /* already gone */ } player = null; }
     if (!tvEl) return;
     tvEl.innerHTML = "";
-    const src = on && tvEmbedUrl(tv.videos.map((v) => v.id), tv.playlist);
-    if (src) {
-      const f = document.createElement("iframe");
-      Object.assign(f, { src, title: "Pacers highlights", allowFullscreen: true,
-                         referrerPolicy: "strict-origin-when-cross-origin" });
-      f.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
-      tvEl.appendChild(f);
-    }
+    const src = on && tvSource();
+    if (!src) return;
+    const slot = document.createElement("div");
+    tvEl.appendChild(slot);
+    await loadYouTubeApi();
+    if (!tv.on || !tvEl.contains(slot)) return;      // switched off while the API was loading
+    player = new YT.Player(slot, {
+      host: "https://www.youtube-nocookie.com", width: "100%", height: "100%",
+      playerVars: { autoplay: 1, playsinline: 1, rel: 0, origin: location.origin },
+      events: {
+        onReady: (e) => {
+          if (Array.isArray(src)) e.target.loadPlaylist(src, 0); else e.target.loadPlaylist(src);
+        },
+        onStateChange: (e) => {
+          tvCount();
+          if (e.data === YT.PlayerState.ENDED && tv.count && tv.index >= tv.count - 1) player.playVideoAt(0);
+        },
+      },
+    });
+    const f = tvEl.querySelector("iframe");
+    if (f) { f.title = "Pacers highlights"; f.referrerPolicy = "strict-origin-when-cross-origin"; }
   }
 
   function tvHit(e) {                                 // is the pointer on the TV or its remote?
@@ -1208,10 +1254,10 @@ const Office = (() => {
     if (S) label(String(S._rejectsToday || 0), b.x, b.y - 13.5, C.red, 6.5);
     if (P.tv) {                                       // the TV's caption, on its cabinet
       const v = P.tv, n = tv.videos.length;
-      label(tv.on ? (n ? `PACERS HIGHLIGHTS · ${n} VIDEO${n === 1 ? "" : "S"}`
-                       : tv.playlist ? "PACERS HIGHLIGHTS · PLAYLIST" : "NO SIGNAL · SEE README")
-                  : (tv.hover ? "CLICK TO TURN ON" : "TV · CLICK THE REMOTE"),
-            v.x + v.w / 2, 257.5, tv.on ? C.pink : "#6b7290", 4);
+      const pos = tv.count ? ` · ${tv.index + 1} / ${tv.count}` : (n ? ` · ${n} VIDEOS` : "");
+      if (tv.on) label(n || tv.playlist ? `PACERS HIGHLIGHTS${pos}` : "NO SIGNAL · SEE README",
+                       v.x - 2, 257.5, C.pink, 4, "left");
+      else label(tv.hover ? "CLICK TO TURN ON" : "TV · CLICK THE REMOTE", v.x + v.w / 2, 257.5, "#6b7290", 4);
     }
     const sb = P.scoreboard, sc = S?.score?.by_verdict?.all?.["1h"];
     label("SCOREBOARD · 1H", sb.x, sb.y + 7.5, "#7d8499", 4);
@@ -1251,6 +1297,13 @@ const Office = (() => {
   return {
     init(canvas, chips, tvBox) {
       cv = canvas; ctx = cv.getContext("2d"); chipsEl = chips || null; tvEl = tvBox || null;
+      if (tvEl) {                                     // the remote's skip buttons, shown while it plays
+        tvCtrl = document.createElement("div"); tvCtrl.id = "tv-ctrl";
+        tvCtrl.innerHTML = '<button type="button" data-d="-1" title="Previous video">⏮</button>'
+                         + '<button type="button" data-d="1" title="Next video">⏭</button>';
+        tvCtrl.querySelectorAll("button").forEach((b) => b.onclick = () => tvStep(+b.dataset.d));
+        tvEl.after(tvCtrl);
+      }
       cv.addEventListener("click", (e) => { if (tvHit(e) && Office.onTvClick) Office.onTvClick(); });
       cv.addEventListener("mousemove", (e) => { tv.hover = tvHit(e); cv.style.cursor = tv.hover ? "pointer" : ""; });
       art = document.createElement("canvas"); a = art.getContext("2d");

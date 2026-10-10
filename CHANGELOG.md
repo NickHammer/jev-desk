@@ -2,6 +2,25 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: Pacers TV, skip buttons and real looping
+
+### Fixed
+- **The TV kept replaying one video and couldn't move through the playlist.** It used a
+  plain embed link with YouTube's `loop` option, which loops a single video when given
+  a playlist. The TV-sized player was also too small for YouTube to show its own
+  playlist controls.
+
+### Changed
+- The TV now uses YouTube's IFrame Player API, loaded from youtube.com only the first
+  time the TV is turned on:
+  - It starts at the first video of the list or playlist.
+  - After the last video it goes back to the first.
+- **⏮ ⏭ buttons on the TV cabinet** move to the previous or next video and wrap around
+  at the ends.
+- The cabinet caption shows the position, e.g. "PACERS HIGHLIGHTS · 3 / 24".
+- Turning the TV off now removes the player completely, and turning it on again
+  starts fresh.
+
 ## 2026-10-10: Pacers TV, playlist backup
 
 ### Added

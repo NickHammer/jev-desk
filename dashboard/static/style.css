@@ -52,6 +52,10 @@ body { padding: 10px; }
 #tv { position: absolute; display: none; background: #000; z-index: 1; }
 #tv.big { box-shadow: 0 0 0 2px var(--pink), 0 8px 30px rgba(0,0,0,.6); }
 #tv iframe { width: 100%; height: 100%; border: 0; display: block; }
+#tv-ctrl { position: absolute; display: none; gap: 4px; z-index: 2; }
+#tv-ctrl button { font-size: 11px; line-height: 1; padding: 3px 7px; border-radius: 3px; cursor: pointer;
+                  background: #0b0d14; color: #ffe1f3; border: 1px solid #2a3046; }
+#tv-ctrl button:hover { border-color: var(--pink); color: #fff; }
 .mode { font-size: 11px; padding: 3px 8px; border-radius: 3px; background: #0b0d14; color: var(--muted); letter-spacing: 1px; }
 .mode.live { color: var(--green); }
 .mode.idle { color: var(--orange); }
