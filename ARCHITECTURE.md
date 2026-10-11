@@ -372,6 +372,39 @@ the same days. It never calls Jev and never changes anything; it answers "what i
 wash trading allowed 0.8?" without waiting. With no arguments it checks itself: today's
 limits should reproduce every recorded verdict.
 
+## 4b. The slow desk: older survivors, measured over days
+
+A second, separate desk that doesn't race the snipers. Every 4 hours
+(`deploy/jev-desk-slow.timer`, at 00:07, 04:07, …) `run_slow.sh` looks at tokens 3–30
+days old that still trade a lot, and scores them at **1 day, 3 days and 7 days**. It
+uses the same Jev questions and SOFT limits as the fast desk, so the two desks are
+comparable.
+
+```mermaid
+flowchart TD
+    al["alumni: tokens the fast desk<br/>tracked 3-30 days ago (up to 150)"] --> u["slow universe"]
+    tp["GeckoTerminal top Solana pools<br/>by 24h volume (2 pages)"] --> u
+    u -- "minus wrapped SOL, USDC, USDT" --> m{"slow market check<br/>age 3-30 d, liquidity ≥ $100k,<br/>volume ≥ $250k, mcap $0.5M-500M,<br/>≥ 1,000 trades, turnover ≤ 20"}
+    m -- survivors --> ctl["control: 3 random survivors<br/>tracked, never judged"]
+    m -- "deepest liquidity, top 6,<br/>not judged in the last 24 h" --> d{"slow chain check<br/>authorities renounced, top wallet ≤ 5%,<br/>top 10 ≤ 40%, ≥ 1,000 holders"}
+    d --> j["slow_judge.py<br/>same Jev questions and limits, pick ≤ 1"]
+    j --> tr[("tracked, desk = slow<br/>priced at 1d / 3d / 7d")]
+    ctl --> tr
+```
+
+- **Kept apart from the fast desk.** Every tracked token has a `desk` label, and the slow
+  desk has its own settings stamp, built from the `SLOW` settings and
+  `slow_scan.py`/`slow_judge.py` on top of the shared Jev code. It never benches tokens
+  and never emits dashboard events, so the fast desk's watchlist, bench, stamp and floor
+  are untouched.
+- **Pricing.** The fast cycle's `score.py` prices every desk's due checkpoints, with
+  windows of 6 h after 1d, 12 h after 3d and 24 h after 7d.
+- **Never at the same time.** `run_all.sh` and `run_slow.sh` share a lock
+  (`runs/.cycle.lock`), because they share the GeckoTerminal and Solana budgets. A fast
+  cycle waits up to 6 minutes for a slow run, then skips.
+- **Its own reports:** `score.py --desk slow`, `whatif.py --desk slow` and
+  `signals.py --desk slow`. Its Jev answers are saved as `runs/judged-slow-*.json`.
+
 ## 5. A token's life
 
 ```mermaid
@@ -406,6 +439,8 @@ flowchart LR
         rs["run_scan.py"]
         rj["run_judge.py"]
         sc["score.py"]
+        ss["slow_scan.py"]
+        sj["slow_judge.py"]
     end
     subgraph core["Pipeline"]
         src["sources.py<br/>API clients, rate limits"]
@@ -426,6 +461,10 @@ flowchart LR
     tm(["systemd timer"]) --> ra["run_all.sh"]
     ra --> rs & rj & sc
     ra --> fo["forensics.py<br/>chain forensics"]
+    tm2(["slow timer, every 4 h"]) --> rsl["run_slow.sh"]
+    rsl --> ss & sj
+    ss --> src & col & fil & db & sg & st
+    sj --> jd & fil & db & sg & st
     fo --> src & db
     rs --> src & col & fil & db
     rj --> jd & fil & db
@@ -448,10 +487,11 @@ flowchart LR
 | `.env` | Jev key, Helius RPC URL, `RPC_PER_MINUTE` | **never** |
 | `desk.db` | watchlist, bench, tracked outcomes with attention signals, settings stamps, holder snapshots (3 days), chain forensics and early buyers (SQLite) | no |
 | `runs/latest.json` | finalists from the last scan | no |
+| `runs/slow-latest.json`, `runs/judged-slow-*.json` | the slow desk's finalists and Jev answers (30 days) | no |
 | `runs/judged-*.json` | every Jev answer, model id, and shadow pick; kept 30 days (`whatif.py` replays them) | no |
 | `runs/events.jsonl` | the event log the dashboard reads; kept 48 hours | no |
 | systemd journal | each cycle's output (`journalctl -u jev-desk`) | no |
-| `/etc/systemd/system/jev-desk.*`, `jev-dashboard.service` | the installed timer and dashboard service, from `deploy/` | no (templates are) |
+| `/etc/systemd/system/jev-desk.*`, `jev-desk-slow.*`, `jev-dashboard.service` | the installed timers and services, from `deploy/` | no (templates are) |
 | everything else | code and docs | yes |
 
 ## 8. Roadmap
@@ -468,6 +508,8 @@ flowchart LR
 | D2.1 | Dashboard: cards on the left, detailed pixel-art floor | done |
 | D3 | Dashboard: the courier cat and event-driven animation, with replay | done |
 | D4 | Dashboard: always-on service, control group on the page, docs | **built, testing** |
-| 4.1 | Scorekeeper: control group, gone checkpoints, settings stamp | **built, collecting data** |
+| 4.1 | Scorekeeper: control group, gone checkpoints, settings stamp | done, collecting data |
+| 4.2 | What-if replays, medians, attention signals, chain forensics | **built, collecting data** |
+| S | Slow desk: survivors 3-30 days old, scored at 1d / 3d / 7d, every 4 hours | **built, testing** |
 | 6 | Review the scorecard (1–2 weeks of data); decide whether execution is worth building | planned |
 | later | Optional X reading via xAI | idea |

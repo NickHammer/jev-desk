@@ -1,0 +1,15 @@
+# Template: deploy/install.sh fills in __USER__ and __DIR__.
+[Unit]
+Description=jev-desk slow desk (older survivors, scored at 1d / 3d / 7d)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/run_slow.sh
+Environment=PYTHONUNBUFFERED=1
+# may wait up to 15 min for a fast cycle to finish, then runs for a few minutes
+TimeoutStartSec=30min
+Nice=10

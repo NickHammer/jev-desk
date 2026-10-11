@@ -96,6 +96,8 @@ def scorecard():
         rows, watch, benched = [], None, None
     finally:
         con.close()
+    slow = sum(1 for r in rows if (r.get("desk") or "fast") == "slow")
+    rows = [r for r in rows if (r.get("desk") or "fast") == "fast"]   # the page shows the fast desk
     for r in rows:
         r["fails"] = json.loads(r.get("fails") or "[]")
         r["net"] = {cp: _net(r, cp) for cp in CHECKPOINTS}
@@ -119,7 +121,8 @@ def scorecard():
                "net": r["net"]} for r in rows]
     return {"series": series, "by_verdict": by_verdict, "by_check": by_check,
             "counts": {"tracked": len(rows), "judged": len(judged),
-                       "control": len(rows) - len(judged), "watchlist": watch, "benched": benched}}
+                       "control": len(rows) - len(judged), "slow": slow,
+                       "watchlist": watch, "benched": benched}}
 
 
 def _cycles(evts):

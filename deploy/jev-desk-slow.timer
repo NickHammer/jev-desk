@@ -1,0 +1,11 @@
+# Template: deploy/install.sh installs it. Every 4 hours, 7 minutes past (00:07, 04:07, ...).
+[Unit]
+Description=Run the jev-desk slow desk every 4 hours
+
+[Timer]
+OnCalendar=*-*-* 00/4:07:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

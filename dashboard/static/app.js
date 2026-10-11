@@ -126,7 +126,8 @@ function renderCards() {
   });
   const h1 = sc["1h"] || {};
   setCard("score", {
-    label: `${S.score?.counts?.judged ?? 0} judged · ${S.score?.counts?.control ?? 0} control`,
+    label: `${S.score?.counts?.judged ?? 0} judged · ${S.score?.counts?.control ?? 0} control`
+           + (S.score?.counts?.slow ? ` · slow ${S.score.counts.slow}` : ""),
     value: h1.n ? `1h ${signed(h1.avg)}` : "waiting",
     bar: (h1.n || 0) / 30,
     quote: h1.n ? `${h1.n} priced at 1h, ${h1.win}% would have won` : "first prices arrive 1h after judging",

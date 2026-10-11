@@ -8,7 +8,14 @@ import time
 from pathlib import Path
 
 from thresholds import (BENCH_MINUTES, DEFAULT_BENCH, HARD, CHECKPOINTS, GONE_AFTER_TRIES,
-                        TRACK_DEDUP_HOURS, CHECKPOINT_WINDOW, MISSING_ANSWER_BENCH)
+                        TRACK_DEDUP_HOURS, CHECKPOINT_WINDOW, MISSING_ANSWER_BENCH,
+                        SLOW_CHECKPOINTS, SLOW_CHECKPOINT_WINDOW)
+
+# Each desk prices its tokens at its own checkpoints. Names never repeat across desks,
+# so one combined table of checkpoints and windows serves every desk.
+DESK_CHECKPOINTS = {"fast": CHECKPOINTS, "slow": SLOW_CHECKPOINTS}
+ALL_CHECKPOINTS = {**CHECKPOINTS, **SLOW_CHECKPOINTS}
+ALL_WINDOWS = {**CHECKPOINT_WINDOW, **SLOW_CHECKPOINT_WINDOW}
 
 DB = sqlite3.connect(Path(__file__).with_name("desk.db"))
 DB.executescript("""
@@ -33,8 +40,9 @@ CREATE TABLE IF NOT EXISTS early_buyers(
 """)
 # columns added after the first release; existing databases get them on first use
 _have = {c[1] for c in DB.execute("PRAGMA table_info(tracked)")}
-for _col, _type in [("config", "TEXT"), ("signals", "TEXT"),
-                    *((f"tries_{cp}", "INTEGER DEFAULT 0") for cp in CHECKPOINTS)]:
+for _col, _type in [("config", "TEXT"), ("signals", "TEXT"), ("desk", "TEXT DEFAULT 'fast'"),
+                    *((c, "REAL") for cp in SLOW_CHECKPOINTS for c in (f"p_{cp}", f"min_{cp}")),
+                    *((f"tries_{cp}", "INTEGER DEFAULT 0") for cp in ALL_CHECKPOINTS)]:
     if _col not in _have:
         DB.execute(f"ALTER TABLE tracked ADD COLUMN {_col} {_type}")
 DB.commit()
@@ -111,7 +119,7 @@ def remember_settings(stamp: str, settings: str):
     DB.commit()
 
 
-def track(rows: list[dict], run: str, stamp: str | None = None) -> int:
+def track(rows: list[dict], run: str, stamp: str | None = None, desk: str = "fast") -> int:
     """Remember tokens with their price now, so their outcome can be scored later.
     One row per token per TRACK_DEDUP_HOURS, so a token judged every run isn't counted
     many times; a pick is always recorded, even if the token was tracked earlier.
@@ -123,15 +131,15 @@ def track(rows: list[dict], run: str, stamp: str | None = None) -> int:
             continue                                   # can't score without a start price
         same_group = "verdict = 'control'" if r["verdict"] == "control" else "verdict != 'control'"
         recent = {v for (v,) in DB.execute(
-            f"SELECT verdict FROM tracked WHERE addr=? AND judged_at>? AND {same_group}",
-            (r["addr"], now - TRACK_DEDUP_HOURS * 3600))}
+            f"SELECT verdict FROM tracked WHERE addr=? AND judged_at>? AND {same_group} "
+            f"AND COALESCE(desk, 'fast') = ?", (r["addr"], now - TRACK_DEDUP_HOURS * 3600, desk))}
         if recent and not (r["verdict"] == "pick" and "pick" not in recent):
             continue
         DB.execute("INSERT INTO tracked(addr, ticker, run, judged_at, verdict, fails, price0,"
-                   " config, signals) VALUES (?,?,?,?,?,?,?,?,?)",
+                   " config, signals, desk) VALUES (?,?,?,?,?,?,?,?,?,?)",
                    (r["addr"], r["ticker"], run, now, r["verdict"],
                     json.dumps(r.get("fails") or []), r["price0"], stamp,
-                    json.dumps(r["signals"]) if r.get("signals") is not None else None))
+                    json.dumps(r["signals"]) if r.get("signals") is not None else None, desk))
         added += 1
     DB.commit()
     return added
@@ -140,15 +148,16 @@ def track(rows: list[dict], run: str, stamp: str | None = None) -> int:
 def due_checkpoints() -> list[dict]:
     """Unpriced checkpoints that are due and still inside their pricing window."""
     now, out = time.time(), []
-    for name, mins in CHECKPOINTS.items():
-        opens = mins * 60
-        closes = opens + CHECKPOINT_WINDOW[name] * 60
-        for rid, addr, at, ticker, verdict, p0 in DB.execute(
-                f"SELECT id, addr, judged_at, ticker, verdict, price0 FROM tracked "
-                f"WHERE p_{name} IS NULL AND judged_at + ? <= ? AND judged_at + ? > ?",
-                (opens, now, closes, now)):
-            out.append({"id": rid, "addr": addr, "checkpoint": name, "judged_at": at,
-                        "ticker": ticker, "verdict": verdict, "price0": p0})
+    for desk, cps in DESK_CHECKPOINTS.items():
+        for name, mins in cps.items():
+            opens = mins * 60
+            closes = opens + ALL_WINDOWS[name] * 60
+            for rid, addr, at, ticker, verdict, p0 in DB.execute(
+                    f"SELECT id, addr, judged_at, ticker, verdict, price0 FROM tracked "
+                    f"WHERE p_{name} IS NULL AND judged_at + ? <= ? AND judged_at + ? > ? "
+                    f"AND COALESCE(desk, 'fast') = ?", (opens, now, closes, now, desk)):
+                out.append({"id": rid, "addr": addr, "checkpoint": name, "judged_at": at,
+                            "ticker": ticker, "verdict": verdict, "price0": p0, "desk": desk})
     return out
 
 
@@ -158,7 +167,7 @@ def checkpoint_state(row: dict, name: str) -> str:
     'pending' (not due yet, or its window is still open)."""
     if row.get(f"p_{name}") is not None:
         return "priced"
-    closes = row["judged_at"] + (CHECKPOINTS[name] + CHECKPOINT_WINDOW[name]) * 60
+    closes = row["judged_at"] + (ALL_CHECKPOINTS[name] + ALL_WINDOWS[name]) * 60
     if time.time() < closes:
         return "pending"
     return "gone" if (row.get(f"tries_{name}") or 0) >= GONE_AFTER_TRIES else "missed"
@@ -229,4 +238,5 @@ def tracked_rows() -> list[dict]:
     for r in rows:
         r["fails"] = json.loads(r["fails"] or "[]")
         r["signals"] = json.loads(r.get("signals") or "null")
+        r["desk"] = r.get("desk") or "fast"
     return rows

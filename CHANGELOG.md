@@ -2,6 +2,42 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-11: The slow desk (step 3)
+
+### Added
+- **A second desk for tokens that survived their launch**, run every 4 hours by
+  `deploy/jev-desk-slow.timer` (00:07, 04:07, …) through `run_slow.sh`. It is scored at
+  **1 day, 3 days and 7 days**.
+  - `slow_scan.py` builds the universe from "alumni" (tokens the fast desk tracked 3–30
+    days ago, up to 150) plus GeckoTerminal's top Solana pools by 24h volume. Wrapped
+    SOL, USDC and USDT are excluded. It applies market and chain checks tuned for older
+    tokens (`SLOW` in `thresholds.py`): age 3–30 days, liquidity ≥ $100k, volume ≥ $250k,
+    mcap $0.5M–500M, ≥ 1,000 trades a day, authorities renounced, top wallet ≤ 5%,
+    top 10 ≤ 40% and ≥ 1,000 holders. Each run also tracks 3 random survivors as the slow
+    desk's control group. The 6 deepest-liquidity survivors not judged in the last 24 h
+    get dossiers.
+  - `slow_judge.py` asks Jev the same questions with the same SOFT limits as the fast
+    desk, picks at most one, and tracks every token with its attention signals.
+    Forensics are added by the fast cycle's forensics step when the token's history
+    isn't too busy.
+- **`desk` label on every tracked token** ("fast" or "slow"). Existing rows become
+  "fast". The new 1d, 3d and 7d checkpoint columns and their pricing windows (6 h,
+  12 h, 24 h) are added automatically.
+- **`--desk slow`** for `score.py`, `whatif.py` and `signals.py`.
+- **A separate settings stamp for the slow desk**: its own settings and code on top of
+  the shared Jev code. The fast desk's stamp is unchanged.
+- **A shared lock** (`runs/.cycle.lock`), so a fast cycle and a slow run never overlap
+  on the GeckoTerminal and Solana budgets. A fast cycle waits up to 6 minutes, then
+  skips.
+- The dashboard keeps showing the fast desk only. The Scorekeeper card adds
+  "· slow N" once the slow desk has tracked tokens.
+
+### Changed
+- `whatif.py` counts control tokens tracked up to an hour either side of the judged
+  tokens, because the control group is tracked during the scan, a few minutes before
+  the judge.
+- `deploy/install.sh` installs and starts the slow desk's timer as well.
+
 ## 2026-10-10: Chain forensics (step 2)
 
 ### Added

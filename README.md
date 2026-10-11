@@ -80,6 +80,20 @@ sudo systemctl disable --now jev-desk.timer     # stop it
 After pulling new code, nothing needs reinstalling: the next cycle uses it. Re-run
 `deploy/install.sh` only if the files in `deploy/` change.
 
+## The slow desk
+
+A second desk for older tokens that survived their launch (3–30 days old), scored at 1
+day, 3 days and 7 days. `deploy/install.sh` installs its timer, which runs `run_slow.sh`
+every 4 hours. It never runs at the same time as a fast cycle.
+
+```bash
+journalctl -u jev-desk-slow -f                              # watch slow runs
+sudo systemctl start jev-desk-slow.service                  # one slow run now
+.venv/bin/python score.py --no-update --desk slow           # the slow desk's scorecard
+.venv/bin/python whatif.py --desk slow wash_trading=0.8     # what-if on slow-desk answers
+.venv/bin/python signals.py --desk slow                     # its signals
+```
+
 ## The dashboard
 
 `deploy/install.sh` also installs the dashboard as a service. It starts on boot,
@@ -142,6 +156,7 @@ plain-English definitions of the terms used.
 | `whatif.py` | replays Jev's saved answers under other limits, read-only |
 | `signals.py` | attention signals recorded with every tracked token, and their report |
 | `forensics.py` | chain forensics, last step of each cycle: deployer, early buyers, bundling |
+| `slow_scan.py`, `slow_judge.py`, `run_slow.sh` | the slow desk: older survivors every 4 hours |
 | `forensics_probe.py` | runs the forensics lookups verbosely on chosen tokens, without saving |
 | `CHANGELOG.md` | what changed and when |
 

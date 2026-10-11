@@ -6,6 +6,7 @@ again and without waiting for new data. Read-only: it never changes the desk.
     python whatif.py shape_min_crowd=0.4           the "real crowd" probability limit
     python whatif.py --drop wash_trading effort    ignore those checks entirely
     python whatif.py --sweep wash_trading          try a range of values for one check
+    python whatif.py --desk slow ...               the slow desk (1d / 3d / 7d)
 
 Each judged token's answers come from runs/judged-*.json (kept 7 days) and its prices
 from desk.db, so only tokens judged in the last 7 days can be replayed. The pick step
@@ -21,18 +22,21 @@ from pathlib import Path
 
 import db
 import filter as F
-from score import cell, net_return, HEADER, SUB
-from thresholds import CHECKPOINTS, SOFT, SHAPE_MIN_CROWD
+from score import cell, net_return, header_for, sub_for
+from thresholds import SOFT, SHAPE_MIN_CROWD
 
 RUNS = Path(__file__).with_name("runs")
 SWEEP = {"max": [0.6, 0.7, 0.8, 0.9, 1.0], "min": [1.0, 0.75, 0.5, 0.25, 0.0]}
 
 
-def load() -> tuple[list[dict], list[dict]]:
+CPS = db.DESK_CHECKPOINTS["fast"]     # the checkpoints shown; --desk slow switches them
+
+
+def load(desk: str = "fast") -> tuple[list[dict], list[dict]]:
     """Judged tokens that are both in a saved judged file and tracked with prices,
     plus the control tokens tracked over the same days."""
     answers = {}
-    for f in sorted(RUNS.glob("judged-2*.json")):
+    for f in sorted(RUNS.glob("judged-slow-*.json" if desk == "slow" else "judged-2*.json")):
         try:
             data = json.loads(f.read_text())
         except (OSError, ValueError):
@@ -40,7 +44,7 @@ def load() -> tuple[list[dict], list[dict]]:
         for r in data.get("judged", []):
             if r.get("answers"):
                 answers[(data.get("at"), r["addr"])] = r["answers"]
-    rows = db.tracked_rows()
+    rows = [r for r in db.tracked_rows() if r["desk"] == desk]
     judged = []
     for r in rows:
         if r["verdict"] != "control" and (r["run"], r["addr"]) in answers:
@@ -48,7 +52,8 @@ def load() -> tuple[list[dict], list[dict]]:
     if not judged:
         return [], []
     lo, hi = min(r["judged_at"] for r in judged), max(r["judged_at"] for r in judged)
-    control = [r for r in rows if r["verdict"] == "control" and lo <= r["judged_at"] <= hi]
+    # control tokens are tracked during the scan, a few minutes before the judge runs
+    control = [r for r in rows if r["verdict"] == "control" and lo - 3600 <= r["judged_at"] <= hi + 3600]
     return judged, control
 
 
@@ -70,7 +75,7 @@ def replay(judged: list[dict], soft: dict, shape_min: float, drop: set[str]) -> 
 def line(name: str, members: list[dict]) -> str:
     return f"{name:<16}" + "".join(
         "  " + cell([v for r in members if (v := net_return(r, cp)) is not None])
-        for cp in CHECKPOINTS)
+        for cp in CPS)
 
 
 def describe(soft: dict, shape_min: float, drop: set[str]) -> str:
@@ -89,7 +94,7 @@ def report(judged, control, soft, shape_min, drop):
     print(f"WHAT-IF: {describe(soft, shape_min, drop)}")
     print(f"replaying {len(res)} judged token(s) with Jev's saved answers; "
           f"control = {len(control)} random token(s) tracked over the same days\n")
-    print(f"{'':<16}{HEADER}\n{'group':<16}{SUB}")
+    print(f"{'':<16}{header_for(CPS)}\n{'group':<16}{sub_for(CPS)}")
     print(line("would pass", passed))
     print(line("still rejected", [r for r in res if r["would_fail"]]))
     print(line("control", control))
@@ -97,7 +102,7 @@ def report(judged, control, soft, shape_min, drop):
         print(f"\ntokens that would pass ({len(passed)}):")
         for r in sorted(passed, key=lambda r: r["judged_at"]):
             nets = "  ".join(f"{cp} {'   -   ' if (v := net_return(r, cp)) is None else f'{v:+6.1f}%'}"
-                             for cp in CHECKPOINTS)
+                             for cp in CPS)
             today = ", ".join(r["fails"]) or "passed"
             print(f"  {r['ticker'][:12]:<12} {nets}   (today: {today})")
     if describe(soft, shape_min, drop) == "today's limits":
@@ -117,10 +122,10 @@ def sweep(judged, control, name):
     print(f"SWEEP: {name} ({direction}), every other limit as today")
     print(f"control over the same days: "
           + ", ".join(f"{cp} median {statistics.median(v):+.1f}% (n={len(v)})"
-                      for cp in CHECKPOINTS
+                      for cp in CPS
                       if (v := [x for r in control if (x := net_return(r, cp)) is not None]))
           + "\n")
-    print(f"{'limit':<16}{HEADER}\n{'would pass':<16}{SUB}")
+    print(f"{'limit':<16}{header_for(CPS)}\n{'would pass':<16}{sub_for(CPS)}")
     for val in values:
         soft = dict(SOFT)
         shape_min = SHAPE_MIN_CROWD
@@ -139,9 +144,12 @@ def main():
     ap.add_argument("limits", nargs="*", metavar="check=value")
     ap.add_argument("--drop", nargs="+", default=[], metavar="check")
     ap.add_argument("--sweep", metavar="check")
+    ap.add_argument("--desk", choices=("fast", "slow"), default="fast")
     args = ap.parse_args()
 
-    judged, control = load()
+    global CPS
+    CPS = db.DESK_CHECKPOINTS[args.desk]
+    judged, control = load(args.desk)
     if not judged:
         raise SystemExit("No judged tokens with saved answers yet (runs/judged-*.json, last 7 days).")
     if args.sweep:

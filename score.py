@@ -6,6 +6,7 @@ happened, for picks, for tokens that passed, and for tokens Jev rejected.
     python score.py --no-update         just print the scorecard
     python score.py --settings current  only tokens judged under today's settings
     python score.py --settings 1a2b3c4d only tokens judged under that settings stamp
+    python score.py --desk slow         the slow desk's scorecard (1d / 3d / 7d)
 
 The questions it answers: do Jev's passes beat the control group (random tokens that
 passed the free market check, never judged)? Do rejected tokens really do worse? Is any
@@ -74,13 +75,13 @@ def members_of(rows: list[dict], group: str) -> list[dict]:
     return [r for r in rows if r["verdict"] == group]
 
 
-def table(rows: list[dict], sub: str, worst: bool = False):
+def table(rows: list[dict], sub: str, worst: bool = False, cps=CHECKPOINTS):
     print(f"{'group':<10}{sub}")
     for group in GROUPS:
         members = members_of(rows, group)
         line = "".join("  " + cell([v for r in members
                                     if (v := net_return(r, cp, worst)) is not None])
-                       for cp in CHECKPOINTS)
+                       for cp in cps)
         print(f"{group:<10}{line}")
 
 
@@ -94,17 +95,25 @@ def cell(values: list[float]) -> str:
     return f"{len(values):>4} {avg:>+7.1f}% {med:>+7.1f}% {win:>4.0f}%"
 
 
-HEADER = "".join(f"  {' ' + cp + ' ':-^28}" for cp in CHECKPOINTS)
-SUB = "".join(f"  {'n':>4} {'avg':>8} {'median':>8} {'win':>5}" for _ in CHECKPOINTS)
+def header_for(cps) -> str:
+    return "".join(f"  {' ' + cp + ' ':-^28}" for cp in cps)
 
 
-def report(settings: str | None = None):
-    rows = db.tracked_rows()
+def sub_for(cps) -> str:
+    return "".join(f"  {'n':>4} {'avg':>8} {'median':>8} {'win':>5}" for _ in cps)
+
+
+HEADER, SUB = header_for(CHECKPOINTS), sub_for(CHECKPOINTS)
+
+
+def report(settings: str | None = None, desk: str = "fast"):
+    cps = db.DESK_CHECKPOINTS[desk]
+    rows = [r for r in db.tracked_rows() if r["desk"] == desk]
     stamps = defaultdict(int)
     for r in rows:
         stamps[r.get("config") or "unstamped"] += 1
     if settings:
-        want = settings_stamp.current() if settings == "current" else settings
+        want = settings_stamp.current(desk) if settings == "current" else settings
         rows = [r for r in rows if r.get("config") == want]
         print(f"settings {want} only\n")
     if not rows:
@@ -112,22 +121,22 @@ def report(settings: str | None = None):
         return
     since = time.strftime("%Y-%m-%d %H:%M", time.localtime(min(r["judged_at"] for r in rows)))
     judged = sum(r["verdict"] != "control" for r in rows)
-    print(f"SCORECARD: {len(rows)} token(s) tracked since {since} "
+    print(f"{'SLOW DESK ' if desk == 'slow' else ''}SCORECARD: {len(rows)} token(s) tracked since {since} "
           f"({judged} judged by Jev, {len(rows) - judged} in the control group)")
     print(f"returns are after an assumed {ROUND_TRIP_COST_PCT}% round-trip cost; "
           f"win = share that would have made money; median = the middle token")
     print("control = random tokens that passed the free market check, never judged: "
           "the baseline Jev has to beat\n")
 
-    header, sub = HEADER, SUB
+    header, sub = header_for(cps), sub_for(cps)
     print(f"{'':<10}{header}")
-    table(rows, sub)
+    table(rows, sub, cps=cps)
 
-    gone = sum(db.checkpoint_state(r, cp) == "gone" for r in rows for cp in CHECKPOINTS)
+    gone = sum(db.checkpoint_state(r, cp) == "gone" for r in rows for cp in cps)
     if gone:
         print(f"\nworst case: the same, with every 'gone' checkpoint (no price at all, likely "
               f"rugged) counted as -100%")
-        table(rows, sub, worst=True)
+        table(rows, sub, worst=True, cps=cps)
 
     # Which checks reject tokens, and how did those tokens actually do?
     by_check = defaultdict(list)
@@ -141,23 +150,24 @@ def report(settings: str | None = None):
         for check, members in sorted(by_check.items(), key=lambda kv: -len(kv[1])):
             line = "".join("  " + cell([v for r in members
                                         if (v := net_return(r, cp)) is not None])
-                           for cp in CHECKPOINTS)
+                           for cp in cps)
             print(f"{check[:27]:<28}{line}")
 
-    states = [db.checkpoint_state(r, cp) for r in rows for cp in CHECKPOINTS]
+    states = [db.checkpoint_state(r, cp) for r in rows for cp in cps]
     print(f"\ncheckpoints: {states.count('priced')} priced, {states.count('pending')} pending, "
           f"{states.count('gone')} gone (no price at all: likely rugged or delisted), "
           f"{states.count('missed')} missed (window closed with too few tries)")
     if not settings and len(stamps) > 1:
-        cur = settings_stamp.current()
+        cur = settings_stamp.current(desk)
         print("settings: " + ", ".join(
             f"{k}{' (current)' if k == cur else ''} {n}" for k, n in stamps.items())
             + "  ->  `python score.py --settings current` to see only today's settings")
-    smallest = min((sum(net_return(r, "24h") is not None for r in members_of(rows, g))
+    last = list(cps)[-1]
+    smallest = min((sum(net_return(r, last) is not None for r in members_of(rows, g))
                     for g in ("pass", "control")), default=0)
     if smallest < SMALL:
         print(f"Too early to conclude anything: aim for {SMALL}+ results in both pass and "
-              f"control at 24h before trusting a difference.")
+              f"control at {last} before trusting a difference.")
 
 
 def main():
@@ -165,13 +175,15 @@ def main():
     ap.add_argument("--no-update", action="store_true")
     ap.add_argument("--settings", metavar="STAMP",
                     help="only tokens judged under this settings stamp ('current' for today's)")
+    ap.add_argument("--desk", choices=("fast", "slow"), default="fast",
+                    help="which desk's scorecard (default fast)")
     args = ap.parse_args()
     if not args.no_update:
         filled, missing = update()
         print(f"priced {filled} checkpoint(s)"
               + (f", {missing} could not be priced (will retry)" if missing else "") + "\n")
         events.emit("score", "done", priced=filled, unpriceable=missing)
-    report(args.settings)
+    report(args.settings, args.desk)
 
 
 if __name__ == "__main__":

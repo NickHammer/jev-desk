@@ -5,6 +5,9 @@ set -u
 cd "$(dirname "$0")"
 PY=.venv/bin/python
 rc=0
+mkdir -p runs
+exec 9>runs/.cycle.lock          # shared with run_slow.sh: never two cycles at once
+flock -w 360 9 || { echo "!! a slow-desk run held the lock for 6 min; skipping this cycle"; exit 0; }
 export JEV_CYCLE="$(date -u +%Y%m%dT%H%M%SZ)"   # shared by every step's events
 
 echo "=== jev-desk cycle $(date -u +%FT%TZ) ==="

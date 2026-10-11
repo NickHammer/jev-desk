@@ -2,7 +2,8 @@
 control) so we can later test whether they predict anything. They never decide a
 verdict; the settings stamp is unaffected.
 
-    python signals.py          the report: does each signal separate winners from losers?
+    python signals.py              the report: does each signal separate winners from losers?
+    python signals.py --desk slow  the same for the slow desk
 
 Signals
     vol_accel        last hour's volume / the 6-hour hourly pace (>1 = speeding up)
@@ -100,16 +101,19 @@ FORENSIC = ["deployer_age_h", "deployer_txs", "deployer_launches", "early_buyers
             "bundle_share", "fresh_share", "deployer_funded", "holding_share"]
 
 
-def report():
-    from score import cell, net_return, HEADER, SUB          # noqa: late import, report only
+def report(desk: str = "fast"):
+    from score import cell, net_return, header_for, sub_for  # noqa: late import, report only
+    cps = list(db.DESK_CHECKPOINTS[desk])
     chain = db.forensics_by_mint()
     rows = []
     for r in db.tracked_rows():
+        if r["desk"] != desk:
+            continue
         sig = {**(r.get("signals") or {}), **{k: v for k, v in chain.get(r["addr"], {}).items()
                                               if k in FORENSIC}}
         if sig:
             rows.append({**r, "signals": sig})
-    print(f"ATTENTION SIGNALS: {len(rows)} tracked token(s) with signals "
+    print(f"{'SLOW DESK ' if desk == 'slow' else ''}ATTENTION SIGNALS: {len(rows)} tracked token(s) with signals "
           f"({sum(r['verdict'] == 'control' for r in rows)} control, "
           f"{sum(r['verdict'] != 'control' for r in rows)} judged)")
     print(f"chain forensics done for {len(chain)} token(s)")
@@ -119,12 +123,12 @@ def report():
     if not rows:
         print("Nothing yet: signals are recorded from the next cycle on.")
         return
-    print(f"{'signal':<24}{HEADER}\n{'':<24}{SUB}")
+    print(f"{'signal':<24}{header_for(cps)}\n{'':<24}{sub_for(cps)}")
 
     def show(name, members):
         print(f"{name:<24}" + "".join(
             "  " + cell([v for r in members if (v := net_return(r, cp)) is not None])
-            for cp in ("1h", "6h", "24h")))
+            for cp in cps))
 
     for sig in NUMERIC + FORENSIC:
         have = [r for r in rows if r["signals"].get(sig) is not None]
@@ -143,4 +147,5 @@ def report():
 
 
 if __name__ == "__main__":
-    report()
+    import sys
+    report("slow" if sys.argv[1:] == ["--desk", "slow"] else "fast")

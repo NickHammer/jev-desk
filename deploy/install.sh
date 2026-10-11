@@ -11,15 +11,16 @@ DIR="$(cd "$(dirname "$0")/.." && pwd)"
 USER_NAME="$(id -un)"
 [ -x "$DIR/.venv/bin/python" ] || { echo "No .venv in $DIR. Create it first (see README)."; exit 1; }
 [ -f "$DIR/.env" ] || { echo "No .env in $DIR. Add your keys first."; exit 1; }
-chmod +x "$DIR/run_all.sh"
+chmod +x "$DIR/run_all.sh" "$DIR/run_slow.sh"
 
 echo "Installing for user '$USER_NAME' with the project in $DIR"
-for unit in jev-desk.service jev-desk.timer jev-dashboard.service; do
+for unit in jev-desk.service jev-desk.timer jev-desk-slow.service jev-desk-slow.timer jev-dashboard.service; do
   sed -e "s|__USER__|$USER_NAME|g" -e "s|__DIR__|$DIR|g" "$DIR/deploy/$unit" \
     | sudo tee "/etc/systemd/system/$unit" > /dev/null
 done
 sudo systemctl daemon-reload
 sudo systemctl enable --now jev-desk.timer
+sudo systemctl enable --now jev-desk-slow.timer
 # a dashboard started by hand would hold port 8080; the service replaces it
 if pgrep -u "$USER_NAME" -f "dashboard/server.py" > /dev/null && \
    ! systemctl is-active --quiet jev-dashboard.service; then
@@ -31,12 +32,13 @@ sudo systemctl enable jev-dashboard.service
 sudo systemctl restart jev-dashboard.service
 
 echo
-systemctl list-timers jev-desk.timer --no-pager
+systemctl list-timers jev-desk.timer jev-desk-slow.timer --no-pager
 echo
 systemctl status jev-dashboard.service --no-pager --lines=0 || true
 echo
 echo "Installed. Watch it live:   journalctl -u jev-desk -f"
 echo "Run one cycle right now:    sudo systemctl start jev-desk.service"
 echo "Stop it for good:           sudo systemctl disable --now jev-desk.timer"
+echo "Slow desk (every 4 hours):  journalctl -u jev-desk-slow -f  /  sudo systemctl start jev-desk-slow.service"
 echo "Dashboard:                  http://$(hostname).local:8080  (starts on boot)"
 echo "Dashboard logs / restart:   journalctl -u jev-dashboard -f  /  sudo systemctl restart jev-dashboard"

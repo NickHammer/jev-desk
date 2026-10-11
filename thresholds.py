@@ -97,3 +97,30 @@ GONE_AFTER_TRIES = 2
 # --- Phase 5: running unattended ---------------------------------------------
 RUN_KEEP_DAYS = 30           # runs/judged-*.json older than this are deleted; whatif.py
                              # can only replay what is kept, so keep the whole experiment
+
+# --- The slow desk (slow_scan.py, slow_judge.py; every 4 hours) ------------------
+# Older tokens that survived their launch, measured over days instead of hours, so
+# speed doesn't matter. Same Jev questions and SOFT limits as the fast desk.
+SLOW = {
+    "min_age_days":      3,
+    "max_age_days":      30,
+    "min_liquidity_usd": 100_000,
+    "min_volume_h24":    250_000,
+    "min_mcap_usd":      500_000,
+    "max_mcap_usd":      500_000_000,
+    "min_trades_h24":    1_000,
+    "max_turnover":      20,
+    "max_top_wallet":    0.05,
+    "max_top_10":        0.40,
+    "min_holders":       1_000,
+}
+SLOW_POOL_PAGES = 2          # pages of GeckoTerminal's top Solana pools by 24h volume
+SLOW_MAX_DOSSIERS = 6        # finalists that get a dossier, deepest liquidity first
+SLOW_CONTROL_PER_RUN = 3     # random slow-market survivors tracked as its control group
+SLOW_REJUDGE_HOURS = 24      # a token the slow desk judged this recently is skipped
+SLOW_CHECKPOINTS = {"1d": 1440, "3d": 4320, "7d": 10080}     # minutes after the judgement
+SLOW_CHECKPOINT_WINDOW = {"1d": 360, "3d": 720, "7d": 1440}  # pricing window after each
+# never treated as a slow-desk candidate: wrapped SOL and the big stablecoins
+SLOW_EXCLUDE = {"So11111111111111111111111111111111111111112",
+                "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
+                "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB"}

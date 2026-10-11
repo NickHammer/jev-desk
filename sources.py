@@ -68,6 +68,14 @@ def trending_pools(pages: int) -> list[dict]:
     return found
 
 
+def top_pools(pages: int) -> list[dict]:
+    """Solana pools with the most 24h volume (the slow desk's universe)."""
+    found = []
+    for page in range(1, pages + 1):
+        found += _base_tokens(_gt("/networks/solana/pools", page=page, sort="h24_volume_usd_desc"))
+    return found
+
+
 # --- Market data: GeckoTerminal, up to 30 tokens per call --------------------
 
 def token_pools(addrs: list[str]) -> dict[str, list[dict]]:
