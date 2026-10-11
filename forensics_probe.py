@@ -57,8 +57,24 @@ def oldest_signatures(addr, max_pages):
     return page, pages, True
 
 
+TX_VERSION = [1]         # newest transaction format we ask for; raised if the RPC names a newer one
+errors = Counter()
+
+
 def tx(sig):
-    return rpc("getTransaction", [sig, {"encoding": "jsonParsed", "maxSupportedTransactionVersion": 0}])
+    """One parsed transaction, or {} if it can't be read (counted, never fatal)."""
+    for _ in range(3):
+        try:
+            return rpc("getTransaction", [sig, {"encoding": "jsonParsed",
+                                                "maxSupportedTransactionVersion": TX_VERSION[0]}]) or {}
+        except RuntimeError as e:
+            if "version" in str(e) and "not supported" in str(e):
+                TX_VERSION[0] += 1                        # Solana added a newer format: ask for it
+                continue
+            errors[str(e)[:80]] += 1
+            return {}
+    errors["transaction version keeps rising"] += 1
+    return {}
 
 
 def fee_payer(t):
@@ -196,7 +212,13 @@ def main():
         raise SystemExit("No tracked tokens yet; pass mint addresses instead.")
     print(f"probing {len(mints)} token(s) through {sources.RPC.split('?')[0]} "
           f"(paced at {sources.RPC_PER_MINUTE}/min)")
-    results = [probe(m, t) for m, t in mints]
+    results = []
+    for m, t in mints:
+        try:
+            results.append(probe(m, t))
+        except Exception as e:                        # one bad token mustn't stop the probe
+            print(f"  FAILED: {str(e)[:160]}")
+            results.append({"mint": m, "ok": False, "calls": dict(calls)})
     ok = [r for r in results if r["ok"]]
     if ok:
         per = defaultdict(list)
@@ -206,6 +228,9 @@ def main():
         print("\nSUMMARY  average calls per token: "
               + ", ".join(f"{k} {sum(v) / len(v):.0f}" for k, v in per.items())
               + f"  ->  total {sum(r['total'] for r in ok) / len(ok):.0f}")
+    print(f"transaction format asked for: version {TX_VERSION[0]}")
+    if errors:
+        print("unreadable transactions: " + "; ".join(f"{n}x {e}" for e, n in errors.most_common(3)))
     print("Paste this whole output back to Claude.")
 
 

@@ -16,6 +16,12 @@ All notable changes to jev-desk. Newest first.
   Its output decides how the real signals are built and how many tokens per cycle the
   free Helius tier can afford. It is not part of a cycle and changes nothing.
 
+### Fixed
+- The probe crashed on Solana's newer transaction format ("Transaction version (1) is
+  not supported"). It now asks for version 1 transactions, and moves up automatically
+  if the RPC names a newer format. A transaction or token it can't read is counted and
+  skipped instead of stopping the run.
+
 ## 2026-10-10: Attention signals, and 30 days of Jev's answers
 
 ### Added
