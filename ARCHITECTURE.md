@@ -19,6 +19,9 @@ flowchart TD
     judgeRun --> judged[("runs/judged-*.json<br/>answers + shadow pick")]
     judgeRun --> tracked[("tracked table in desk.db<br/>judged tokens + control group,<br/>price and settings stamp")]
     cycle --> scoreRun["score.py<br/>re-prices at 1h / 6h / 24h"]
+    cycle --> forRun["forensics.py<br/>deployer + early buyers,<br/>4 tokens per cycle"]
+    tracked --> forRun
+    forRun <--> rpc
     tracked --> scoreRun
     scoreRun --> card["scorecard<br/>picks vs passes vs rejects vs control"]
     cycle --> logs[("journalctl -u jev-desk<br/>every cycle's output")]
@@ -50,18 +53,21 @@ sequenceDiagram
     participant S as run_scan.py
     participant J as run_judge.py
     participant K as score.py
+    participant F as forensics.py
     T->>R: start (every 15 min, never overlapping)
     R->>S: scan
     alt scan succeeded
         S-->>R: runs/latest.json written
         R->>J: judge the finalists
-        J->>J: delete saved runs older than 7 days
+        J->>J: delete saved runs older than 30 days
         J-->>R: shadow pick or NO TRADE, tokens tracked, rejects benched
     else scan failed
         R->>R: skip the judge, so old finalists aren't judged twice
     end
     R->>K: score whatever checkpoints are due
     K-->>R: scorecard
+    R->>F: investigate up to 4 new tracked tokens (2.5 min limit)
+    F-->>R: deployer and early-buyer signals cached (a failure never fails the cycle)
     R-->>T: exit 0, or 1 if any step failed
 ```
 
@@ -338,8 +344,26 @@ ignores them:
   community takeover). If DexScreener can't be reached these are recorded as unknown,
   never as "not promoted".
 
-`python signals.py` splits tracked tokens at each signal's median and compares the
-halves at 1h, 6h and 24h.
+**Chain forensics** (`forensics.py`) runs last in each cycle. It takes up to 4 tracked
+tokens without forensics, newest first, within a 2.5-minute limit. Each costs about
+120 Solana RPC calls and is cached for good in the `forensics` table, because a launch
+never changes. From the chain it finds:
+- **the deployer:** the fee payer of the token's first transaction, its wallet age and
+  activity, and how many other tokens it created recently
+- **the first ~15 buyers:** wallets whose balance rose first, including how many bought
+  in one transaction
+- **where each buyer's first SOL came from:** the bundle share is the share funded by
+  one shared wallet; fresh share is the share of wallets under 24h old; plus whether the
+  deployer funded any
+- **holding:** how many of those buyers still hold the token
+
+Early buyer wallets are kept in `early_buyers` for later "smart wallet" analysis. Tokens
+with more than 40,000 transactions are marked too busy. Failures are retried after an
+hour, up to 3 times. `forensics_probe.py` runs the same lookups verbosely on chosen
+tokens without saving.
+
+`python signals.py` splits tracked tokens at each signal's median, attention and
+forensics alike, and compares the halves at 1h, 6h and 24h.
 
 **What-if** (`whatif.py`) replays Jev's saved answers (`runs/judged-*.json`, last 7
 days) through the real `judge_fails()` under other limits. It then joins them to the
@@ -401,6 +425,8 @@ flowchart LR
     end
     tm(["systemd timer"]) --> ra["run_all.sh"]
     ra --> rs & rj & sc
+    ra --> fo["forensics.py<br/>chain forensics"]
+    fo --> src & db
     rs --> src & col & fil & db
     rj --> jd & fil & db
     sc --> src & db
@@ -420,7 +446,7 @@ flowchart LR
 | Place | What | Kept in git? |
 |---|---|---|
 | `.env` | Jev key, Helius RPC URL, `RPC_PER_MINUTE` | **never** |
-| `desk.db` | watchlist, bench, tracked outcomes with attention signals, settings stamps, holder snapshots (3 days) (SQLite) | no |
+| `desk.db` | watchlist, bench, tracked outcomes with attention signals, settings stamps, holder snapshots (3 days), chain forensics and early buyers (SQLite) | no |
 | `runs/latest.json` | finalists from the last scan | no |
 | `runs/judged-*.json` | every Jev answer, model id, and shadow pick; kept 30 days (`whatif.py` replays them) | no |
 | `runs/events.jsonl` | the event log the dashboard reads; kept 48 hours | no |

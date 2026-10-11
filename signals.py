@@ -14,6 +14,8 @@ Signals
     holders_per_hour holders / hours since launch
     holder_growth    new holders per hour since our earliest snapshot in the last 6h
                      (needs two snapshots at least 10 minutes apart)
+  plus the chain-forensics signals from forensics.py (deployer, early buyers, bundling),
+  joined in by token for the report
     boosts_active    paid DexScreener boosts active right now
     paid_orders      paid DexScreener orders, e.g. "tokenProfile:approved"
     promoted         any boost or approved order (True/False), None if DexScreener failed
@@ -94,14 +96,23 @@ def build(t: dict, promo: dict | None = None) -> dict:
 
 NUMERIC = ["vol_accel", "buy_accel", "buyers_accel", "buy_share_1h", "buyer_share_1h",
            "holders", "holders_per_hour", "holder_growth", "boosts_active"]
+FORENSIC = ["deployer_age_h", "deployer_txs", "deployer_launches", "early_buyers", "same_tx_buyers",
+            "bundle_share", "fresh_share", "deployer_funded", "holding_share"]
 
 
 def report():
     from score import cell, net_return, HEADER, SUB          # noqa: late import, report only
-    rows = [r for r in db.tracked_rows() if r.get("signals")]
+    chain = db.forensics_by_mint()
+    rows = []
+    for r in db.tracked_rows():
+        sig = {**(r.get("signals") or {}), **{k: v for k, v in chain.get(r["addr"], {}).items()
+                                              if k in FORENSIC}}
+        if sig:
+            rows.append({**r, "signals": sig})
     print(f"ATTENTION SIGNALS: {len(rows)} tracked token(s) with signals "
           f"({sum(r['verdict'] == 'control' for r in rows)} control, "
           f"{sum(r['verdict'] != 'control' for r in rows)} judged)")
+    print(f"chain forensics done for {len(chain)} token(s)")
     print("Each signal splits tokens at its median into a high and a low half. A signal is "
           "only interesting if\nthe halves differ a lot, the same way at every checkpoint, "
           "and with 30+ tokens in each half.\n")
@@ -115,7 +126,7 @@ def report():
             "  " + cell([v for r in members if (v := net_return(r, cp)) is not None])
             for cp in ("1h", "6h", "24h")))
 
-    for sig in NUMERIC:
+    for sig in NUMERIC + FORENSIC:
         have = [r for r in rows if r["signals"].get(sig) is not None]
         if len(have) < 4:
             print(f"{sig:<24}  (only {len(have)} token(s) have it so far)")

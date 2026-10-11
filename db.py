@@ -25,6 +25,11 @@ CREATE TABLE IF NOT EXISTS settings(
 CREATE TABLE IF NOT EXISTS holder_snaps(
   addr TEXT, t REAL, holders INTEGER);
 CREATE INDEX IF NOT EXISTS holder_snaps_addr ON holder_snaps(addr, t);
+CREATE TABLE IF NOT EXISTS forensics(
+  mint TEXT PRIMARY KEY, at REAL, status TEXT, data TEXT, calls INTEGER, attempts INTEGER);
+CREATE TABLE IF NOT EXISTS early_buyers(
+  mint TEXT, wallet TEXT, funder TEXT, bought_at REAL, fresh INTEGER, still_holds INTEGER,
+  PRIMARY KEY (mint, wallet));
 """)
 # columns added after the first release; existing databases get them on first use
 _have = {c[1] for c in DB.execute("PRAGMA table_info(tracked)")}
@@ -173,6 +178,36 @@ def record_holders(addr: str, holders: int | None):
 def holder_history(addr: str, since_hours: float = 6) -> list[tuple[float, int]]:
     return list(DB.execute("SELECT t, holders FROM holder_snaps WHERE addr=? AND t>? ORDER BY t",
                            (addr, time.time() - since_hours * 3600)))
+
+
+# --- chain forensics (forensics.py) -------------------------------------------------
+
+def forensics_queue(recent_hours: float, max_attempts: int, limit: int) -> list[tuple[str, str]]:
+    """Tracked tokens still lacking forensics, newest first. Failed ones are retried
+    after an hour, up to max_attempts."""
+    now = time.time()
+    rows = DB.execute(
+        "SELECT t.addr, t.ticker, MAX(t.judged_at) AS at FROM tracked t "
+        "LEFT JOIN forensics f ON f.mint = t.addr "
+        "WHERE t.judged_at > ? AND (f.mint IS NULL OR (f.status = 'failed' "
+        "AND f.attempts < ? AND f.at < ?)) GROUP BY t.addr ORDER BY at DESC LIMIT ?",
+        (now - recent_hours * 3600, max_attempts, now - 3600, limit))
+    return [(a, tk) for a, tk, _ in rows]
+
+
+def save_forensics(mint: str, status: str, data: dict, buyers: list[dict], calls: int):
+    DB.execute("INSERT INTO forensics VALUES (?,?,?,?,?,1) ON CONFLICT(mint) DO UPDATE SET "
+               "at=excluded.at, status=excluded.status, data=excluded.data, calls=excluded.calls, "
+               "attempts=forensics.attempts+1", (mint, time.time(), status, json.dumps(data), calls))
+    DB.executemany("INSERT OR REPLACE INTO early_buyers VALUES (?,?,?,?,?,?)",
+                   [(mint, b["wallet"], b.get("funder"), b.get("bought_at"), int(bool(b.get("fresh"))),
+                     None if b.get("still_holds") is None else int(b["still_holds"])) for b in buyers])
+    DB.commit()
+
+
+def forensics_by_mint() -> dict[str, dict]:
+    return {m: json.loads(d or "{}") for m, d in
+            DB.execute("SELECT mint, data FROM forensics WHERE status = 'ok'")}
 
 
 def no_price(rid: int, checkpoint: str):

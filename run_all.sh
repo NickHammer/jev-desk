@@ -15,5 +15,8 @@ else
   rc=1
 fi
 $PY score.py || { echo "!! score failed (exit $?)"; rc=1; }
+# chain forensics last, so it never delays the scan or the judge; a failure here
+# doesn't fail the cycle (it only records signals)
+$PY forensics.py || echo "!! forensics failed (exit $?); signals only, cycle unaffected"
 $PY -c "import events; events.emit('desk', 'cycle_end', rc=$rc)" || true
 exit $rc

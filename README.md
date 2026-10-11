@@ -73,6 +73,7 @@ sudo systemctl start jev-desk.service           # run one cycle now
 .venv/bin/python whatif.py wash_trading=0.8 effort=0.5      # replay Jev's answers under other limits
 .venv/bin/python whatif.py --sweep wash_trading             # try a range for one check
 .venv/bin/python signals.py                                 # do the attention signals predict anything?
+.venv/bin/python forensics.py --verbose                     # one forensics pass, showing each token
 sudo systemctl disable --now jev-desk.timer     # stop it
 ```
 
@@ -140,7 +141,8 @@ plain-English definitions of the terms used.
 | `settings_stamp.py` | the short code for the settings that decided each tracked token |
 | `whatif.py` | replays Jev's saved answers under other limits, read-only |
 | `signals.py` | attention signals recorded with every tracked token, and their report |
-| `forensics_probe.py` | one-off check that the chain-forensics lookups work, and what they cost |
+| `forensics.py` | chain forensics, last step of each cycle: deployer, early buyers, bundling |
+| `forensics_probe.py` | runs the forensics lookups verbosely on chosen tokens, without saving |
 | `CHANGELOG.md` | what changed and when |
 
 ## Fixes vs. the original guide

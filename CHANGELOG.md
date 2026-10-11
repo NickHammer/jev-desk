@@ -2,6 +2,38 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: Chain forensics (step 2)
+
+### Added
+- **`forensics.py`**, the new last step of each cycle, after scoring, so it never delays
+  the scan or Jev. Each cycle it investigates up to 4 tracked tokens, judged and control
+  alike, newest first, within a 2.5-minute limit. Each token costs about 120 Solana RPC
+  calls and is cached for good, since a token's launch never changes. It records, as
+  signals only:
+  - **the deployer:** wallet age at launch, transaction count, other tokens it created
+    in its last 30 transactions
+  - **the early buyers:** how many, and the most that bought in a single transaction
+  - **the bundle share:** the share of early buyers first funded by one shared wallet
+  - **the fresh-wallet share:** wallets under 24h old when they bought
+  - **deployer-funded buyers:** early buyers the deployer itself funded
+  - **the holding share:** how many early buyers still hold the token
+
+  On the probe's 5 tokens, QT's 18 first buyers were all fresh, all funded by the same
+  wallet, all bought together and all sold out: a staged launch this now records.
+- **New tables:** `forensics` (results per token) and `early_buyers` (each early buyer,
+  its funder, and whether it still holds), kept for a later "smart wallet" analysis.
+- `signals.py` now also reports the forensics signals, high half against low half.
+- Tokens with more than 40,000 transactions are marked "too busy". A failed
+  investigation is retried after an hour, up to 3 times, and never fails the cycle.
+
+### Changed
+- Early buyers are now looked for in the first 120 transactions instead of 60, because
+  some tokens' busy first minutes held only a few distinct buyers.
+- `forensics_probe.py` now runs the same code as the cycle step, `forensics.py`, and
+  prints each step without saving anything.
+
+No verdict changes; the settings stamp is unchanged.
+
 ## 2026-10-10: Forensics probe (chain forensics, step 0)
 
 ### Added
