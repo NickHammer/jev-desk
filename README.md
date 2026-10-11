@@ -140,6 +140,7 @@ plain-English definitions of the terms used.
 | `settings_stamp.py` | the short code for the settings that decided each tracked token |
 | `whatif.py` | replays Jev's saved answers under other limits, read-only |
 | `signals.py` | attention signals recorded with every tracked token, and their report |
+| `forensics_probe.py` | one-off check that the chain-forensics lookups work, and what they cost |
 | `CHANGELOG.md` | what changed and when |
 
 ## Fixes vs. the original guide

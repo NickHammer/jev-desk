@@ -2,6 +2,20 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-10: Forensics probe (chain forensics, step 0)
+
+### Added
+- **`forensics_probe.py`**: a one-off, read-only check, run by hand on the Pi, before the
+  chain-forensics signals are built. On 5 recently tracked tokens (or mints you give it)
+  it tries each lookup through your RPC and counts the calls:
+  - the token's first transaction and its deployer
+  - the deployer wallet's age and activity, and other tokens it launched recently
+  - the first ~15 buyer wallets and who first funded each one
+  - how many of those buyers were fresh wallets, and whether they still hold the token
+
+  Its output decides how the real signals are built and how many tokens per cycle the
+  free Helius tier can afford. It is not part of a cycle and changes nothing.
+
 ## 2026-10-10: Attention signals, and 30 days of Jev's answers
 
 ### Added
