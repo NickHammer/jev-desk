@@ -2,6 +2,24 @@
 
 All notable changes to jev-desk. Newest first.
 
+## 2026-10-11: Slow desk alumni from every market survivor
+
+### Changed
+- **Alumni now means every token that passed the fast desk's market check 3–30 days
+  ago**, not only the ones it tracked. The first slow run found that 34 of the 35
+  top-volume Solana pools were under 3 days old, so GeckoTerminal's top pools rarely
+  feed the slow desk, and tracked tokens alone (about 75 a day) were too narrow.
+  - The fast scan now records each market survivor in a new `market_seen` table (kept
+    45 days) at no extra API cost.
+  - The slow desk checks up to 300 alumni per run, the ones still passing most
+    recently first. That is about 10 GeckoTerminal calls.
+
+### Added
+- **Look-alike tickers of majors and stablecoins are excluded from the slow desk.** The
+  first run's biggest "pool" was "UЅⅮT", a fake USDT spelled with Cyrillic and
+  Roman-numeral letters and showing $2B in liquidity. Its market cap would already fail
+  the $500M cap, but impersonators are now skipped outright.
+
 ## 2026-10-11: The slow desk (step 3)
 
 ### Added

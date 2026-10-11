@@ -95,6 +95,7 @@ def main():
     print(f"   pools by dex: {dict(dexes.most_common())}")
     events.emit("market", "done", checked=len(todo), survived=len(survivors),
                 dropped=dropped, kills=dict(kills))
+    db.remember_market_pass(survivors)       # the slow desk checks these again at 3-30 days
 
     # The comparison group: a few random market survivors, tracked without any
     # judgement. Jev's passes have to beat these to be worth anything.

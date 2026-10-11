@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS settings(
 CREATE TABLE IF NOT EXISTS holder_snaps(
   addr TEXT, t REAL, holders INTEGER);
 CREATE INDEX IF NOT EXISTS holder_snaps_addr ON holder_snaps(addr, t);
+CREATE TABLE IF NOT EXISTS market_seen(
+  addr TEXT PRIMARY KEY, symbol TEXT, first_pass REAL, last_pass REAL);
 CREATE TABLE IF NOT EXISTS forensics(
   mint TEXT PRIMARY KEY, at REAL, status TEXT, data TEXT, calls INTEGER, attempts INTEGER);
 CREATE TABLE IF NOT EXISTS early_buyers(
@@ -187,6 +189,27 @@ def record_holders(addr: str, holders: int | None):
 def holder_history(addr: str, since_hours: float = 6) -> list[tuple[float, int]]:
     return list(DB.execute("SELECT t, holders FROM holder_snaps WHERE addr=? AND t>? ORDER BY t",
                            (addr, time.time() - since_hours * 3600)))
+
+
+# --- every token that ever passed the fast market check (the slow desk's alumni) ----
+
+def remember_market_pass(tokens: list[dict]):
+    now = time.time()
+    DB.executemany("INSERT INTO market_seen VALUES (?,?,?,?) ON CONFLICT(addr) DO UPDATE "
+                   "SET last_pass=excluded.last_pass, symbol=excluded.symbol",
+                   [(t["addr"], t.get("ticker"), now, now) for t in tokens])
+    DB.execute("DELETE FROM market_seen WHERE first_pass < ?", (now - 45 * 86400,))
+    DB.commit()
+
+
+def market_alumni(min_days: float, max_days: float, limit: int) -> list[dict]:
+    """Tokens that first passed the fast market check between max_days and min_days ago,
+    the ones still passing most recently first."""
+    now = time.time()
+    rows = DB.execute("SELECT addr, symbol FROM market_seen WHERE first_pass BETWEEN ? AND ? "
+                      "ORDER BY last_pass DESC LIMIT ?",
+                      (now - max_days * 86400, now - min_days * 86400 + 3600, limit))
+    return [{"addr": a, "symbol": s} for a, s in rows]
 
 
 # --- chain forensics (forensics.py) -------------------------------------------------

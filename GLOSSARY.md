@@ -60,7 +60,7 @@ dashboard. Grouped by topic; alphabetical within each group.
 - **Acceleration (vol_accel, buy_accel, buyers_accel)**: the last hour compared with the 6-hour hourly pace. Above 1 means activity is speeding up; below 1, slowing down.
 - **Attention signals**: free numbers about interest in a token (buying momentum, holder growth, paid promotion), recorded with every tracked token but never used to decide. `signals.py` tests whether they predict anything.
 - **Bundle share**: of a token's first ~15 buyers, the share whose first SOL came from one shared wallet. High means one team probably created many wallets to fake a crowd.
-- **Alumni**: tokens the fast desk tracked at launch that are now 3–30 days old. The slow desk checks whether any are still alive.
+- **Alumni**: every token that passed the fast desk's free market check at launch and is now 3–30 days old. The slow desk checks whether any are still alive.
 - **Bench**: a timeout. A rejected token sits out for a while (minutes to days, depending on why) before it can be checked again.
 - **Boost / paid order**: money a token's team paid DexScreener to promote it: boosts, a profile, ads. A "someone is spending to promote this" flag.
 - **Buyer share**: of the distinct wallets that traded in the last hour, the share that bought. Above 0.5 means more wallets buying than selling.

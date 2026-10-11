@@ -382,9 +382,9 @@ comparable.
 
 ```mermaid
 flowchart TD
-    al["alumni: tokens the fast desk<br/>tracked 3-30 days ago (up to 150)"] --> u["slow universe"]
+    al["alumni: every token that passed the<br/>fast market check 3-30 days ago (up to 300)"] --> u["slow universe"]
     tp["GeckoTerminal top Solana pools<br/>by 24h volume (2 pages)"] --> u
-    u -- "minus wrapped SOL, USDC, USDT" --> m{"slow market check<br/>age 3-30 d, liquidity ≥ $100k,<br/>volume ≥ $250k, mcap $0.5M-500M,<br/>≥ 1,000 trades, turnover ≤ 20"}
+    u -- "minus wrapped SOL, USDC, USDT<br/>and look-alike tickers" --> m{"slow market check<br/>age 3-30 d, liquidity ≥ $100k,<br/>volume ≥ $250k, mcap $0.5M-500M,<br/>≥ 1,000 trades, turnover ≤ 20"}
     m -- survivors --> ctl["control: 3 random survivors<br/>tracked, never judged"]
     m -- "deepest liquidity, top 6,<br/>not judged in the last 24 h" --> d{"slow chain check<br/>authorities renounced, top wallet ≤ 5%,<br/>top 10 ≤ 40%, ≥ 1,000 holders"}
     d --> j["slow_judge.py<br/>same Jev questions and limits, pick ≤ 1"]
@@ -485,7 +485,7 @@ flowchart LR
 | Place | What | Kept in git? |
 |---|---|---|
 | `.env` | Jev key, Helius RPC URL, `RPC_PER_MINUTE` | **never** |
-| `desk.db` | watchlist, bench, tracked outcomes with attention signals, settings stamps, holder snapshots (3 days), chain forensics and early buyers (SQLite) | no |
+| `desk.db` | watchlist, bench, tracked outcomes with attention signals, settings stamps, holder snapshots (3 days), chain forensics and early buyers, every market survivor for the slow desk (45 days) (SQLite) | no |
 | `runs/latest.json` | finalists from the last scan | no |
 | `runs/slow-latest.json`, `runs/judged-slow-*.json` | the slow desk's finalists and Jev answers (30 days) | no |
 | `runs/judged-*.json` | every Jev answer, model id, and shadow pick; kept 30 days (`whatif.py` replays them) | no |

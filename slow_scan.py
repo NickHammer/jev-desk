@@ -15,6 +15,7 @@ import argparse
 import json
 import random
 import time
+import unicodedata
 from collections import Counter
 from pathlib import Path
 
@@ -32,7 +33,18 @@ from thresholds import (SLOW, SLOW_POOL_PAGES, SLOW_MAX_DOSSIERS, SLOW_CONTROL_P
                         SLOW_REJUDGE_HOURS, SLOW_EXCLUDE, BONDING_DEXES, MULTI_BATCH)
 
 RUNS = Path(__file__).with_name("runs")
-MAX_ALUMNI = 150          # most recent alumni checked per run, to keep GeckoTerminal calls low
+MAX_ALUMNI = 300          # alumni checked per run (10 GeckoTerminal calls), still-active first
+
+# Look-alike tickers of majors and stablecoins, e.g. "UЅⅮT" spelled with Cyrillic and
+# Roman-numeral letters, are impersonation scams: never slow-desk candidates.
+LOOKALIKE = str.maketrans("АВСЕНІЈКМОРЅТХУаеорсухіј", "ABCEHIJKMOPSTXYaeopcyxij")
+MAJORS = {"USDT", "USDC", "USDG", "PYUSD", "USD1", "SOL", "WSOL", "BTC", "WBTC", "ETH", "WETH"}
+
+
+def impersonates_major(ticker: str) -> bool:
+    raw = str(ticker or "")
+    plain = unicodedata.normalize("NFKC", raw).translate(LOOKALIKE).upper()
+    return plain in MAJORS and not raw.isascii()
 
 
 def money(x):
@@ -82,16 +94,18 @@ def slow_chain_kill(d: dict) -> str | None:
 
 
 def alumni() -> list[dict]:
-    """Tokens the fast desk tracked 3-30 days ago, most recent first."""
-    now, seen, out = time.time(), set(), []
+    """Tokens that passed the fast desk's market check 3-30 days ago (every one, not
+    only the ones it tracked), still-active first; plus tracked tokens from before that
+    list existed."""
+    out = db.market_alumni(SLOW["min_age_days"], SLOW["max_age_days"], MAX_ALUMNI)
+    seen, now = {a["addr"] for a in out}, time.time()
     for r in sorted(db.tracked_rows(), key=lambda r: -r["judged_at"]):
-        if r["desk"] != "fast" or r["addr"] in seen:
-            continue
-        if now - SLOW["max_age_days"] * 86400 <= r["judged_at"] <= now - SLOW["min_age_days"] * 86400 + 3600:
-            seen.add(r["addr"])
-            out.append({"addr": r["addr"], "symbol": r["ticker"]})
         if len(out) >= MAX_ALUMNI:
             break
+        if r["desk"] == "fast" and r["addr"] not in seen and \
+                now - SLOW["max_age_days"] * 86400 <= r["judged_at"] <= now - SLOW["min_age_days"] * 86400 + 3600:
+            seen.add(r["addr"])
+            out.append({"addr": r["addr"], "symbol": r["ticker"]})
     return out
 
 
@@ -115,7 +129,7 @@ def main():
         top = []
     for src, toks in (("alumni", alumni()), ("top pools", top)):
         for t in toks:
-            if t["addr"] not in seen and t["addr"] not in SLOW_EXCLUDE:
+            if t["addr"] not in seen and t["addr"] not in SLOW_EXCLUDE and not impersonates_major(t["symbol"]):
                 seen.add(t["addr"])
                 cands.append({**t, "source": src})
     print(f"slow universe: {len(cands)} token(s) "
